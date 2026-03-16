@@ -3,10 +3,10 @@ import Text "mo:core/Text";
 import Float "mo:core/Float";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
-import Principal "mo:core/Principal";
-import Runtime "mo:core/Runtime";
 import Iter "mo:core/Iter";
 import List "mo:core/List";
+import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
 import Order "mo:core/Order";
 
 import MixinAuthorization "authorization/MixinAuthorization";
@@ -81,6 +81,10 @@ actor {
   // Authorization
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
+
+  // New: Genre interaction store
+  // Stores genre interaction scores for each user (Nat = genreId, Nat = score) (movieId as input)
+  let genreScores = Map.empty<Principal, Map.Map<Nat, Nat>>(); // Principal = user, Nat = genreId, Nat = score
 
   // ADMIN MOVIE CRUD METHODS
 
@@ -546,6 +550,52 @@ actor {
         let reversed = progressList.reverse();
         let filtered = reversed.toArray().filter(func(p) { p.progressSeconds > 0 });
         filtered.map(func(p) { (p.movieId, p.progressSeconds) });
+      };
+    };
+  };
+
+  // New: Track genre interaction
+  public shared ({ caller }) func recordGenreInteraction(genreIds : [Nat], weight : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can record genre interaction");
+    };
+
+    let currentUserScores = switch (genreScores.get(caller)) {
+      case (?score) { score };
+      case (null) { Map.empty<Nat, Nat>() };
+    };
+
+    for (genreId in genreIds.values()) {
+      let currentScore = switch (currentUserScores.get(genreId)) {
+        case (?score) { score };
+        case (null) { 0 };
+      };
+      currentUserScores.add(genreId, currentScore + weight);
+    };
+
+    genreScores.add(caller, currentUserScores);
+  };
+
+  // New: Get top genres
+  public query ({ caller }) func getTopGenres() : async [Nat] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get top genres");
+    };
+
+    switch (genreScores.get(caller)) {
+      case (null) { [] };
+      case (?userScores) {
+        // Convert to array, sort by score descending
+        let array = userScores.toArray();
+        let sorted = array.sort(
+          func(a, b) {
+            // Compare scores (b comes before a for descending order)
+            Nat.compare(b.1, a.1);
+          }
+        );
+
+        let top5 = sorted.sliceToArray(0, if (sorted.size() < 5) { sorted.size() } else { 5 });
+        top5.map(func(entry) { entry.0 });
       };
     };
   };

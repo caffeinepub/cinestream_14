@@ -6,6 +6,7 @@ export default function TMDBTrendingRow() {
   return (
     <TMDBMovieRowUI
       title="Trending Now"
+      label="TRENDING"
       movies={data}
       isLoading={isLoading}
       isError={isError}

@@ -23,10 +23,17 @@ export default function MovieCard({
 }: MovieCardProps) {
   const [imgError, setImgError] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [showRemainingTime, setShowRemainingTime] = useState(false);
   const thumbnailUrl =
     movie.thumbnailUrl && !imgError
       ? movie.thumbnailUrl
       : `https://picsum.photos/seed/${movie.id}/300/450`;
+
+  // Calculate remaining time: duration is in minutes (bigint), progress is percentage 0–100
+  const remainingMins =
+    progress !== undefined && progress > 0 && movie.duration
+      ? Math.max(0, Math.round(Number(movie.duration) * (1 - progress / 100)))
+      : null;
 
   const handleWatchlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -43,7 +50,7 @@ export default function MovieCard({
     >
       <Link to="/movie/$id" params={{ id: movie.id.toString() }}>
         {/* Thumbnail */}
-        <div className="relative overflow-hidden rounded-md bg-secondary aspect-[2/3] transition-transform duration-300 ease-out group-hover:scale-105 card-glow-hover">
+        <div className="relative overflow-hidden rounded-md bg-secondary aspect-[2/3] card-glow-hover">
           <img
             src={thumbnailUrl}
             alt={movie.title}
@@ -51,15 +58,42 @@ export default function MovieCard({
             className="w-full h-full object-cover"
             loading="lazy"
           />
-          {/* Progress bar overlay */}
+
+          {/* Gradient overlay on poster */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+
+          {/* Progress bar with remaining time tooltip */}
           {progress !== undefined && progress > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
-              <div
-                className="h-full bg-[#e50914] transition-all"
-                style={{ width: `${progress}%` }}
-              />
+            <div
+              className="absolute bottom-0 left-0 right-0"
+              onMouseEnter={() => setShowRemainingTime(true)}
+              onMouseLeave={() => setShowRemainingTime(false)}
+            >
+              {showRemainingTime &&
+                remainingMins !== null &&
+                remainingMins > 0 && (
+                  <div
+                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap pointer-events-none"
+                    style={{
+                      background: "rgba(10,10,10,0.92)",
+                      color: "#fff",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      backdropFilter: "blur(8px)",
+                      zIndex: 10,
+                    }}
+                  >
+                    {remainingMins}m remaining
+                  </div>
+                )}
+              <div className="h-1 bg-white/20">
+                <div
+                  className="h-full bg-[#e50914] transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
             </div>
           )}
+
           {/* Center play icon on hover */}
           <div
             className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
@@ -78,7 +112,7 @@ export default function MovieCard({
         </p>
       </Link>
 
-      {/* Expanded hover panel - Netflix style, appears below */}
+      {/* Expanded hover panel */}
       <div
         className={`absolute left-1/2 -translate-x-1/2 top-[calc(100%+8px)] z-50 w-60 bg-card border border-border rounded-lg shadow-2xl overflow-hidden transition-all duration-200 origin-top ${
           hovered
@@ -89,7 +123,6 @@ export default function MovieCard({
           boxShadow: "0 24px 80px rgba(0,0,0,0.9), 0 0 40px rgba(229,9,20,0.2)",
         }}
       >
-        {/* Thumbnail strip */}
         <div className="relative h-28 overflow-hidden">
           <img
             src={thumbnailUrl}
@@ -116,6 +149,12 @@ export default function MovieCard({
               {movie.genre}
             </Badge>
           </div>
+          {/* Show remaining time in hover panel if available */}
+          {remainingMins !== null && remainingMins > 0 && (
+            <p className="text-xs text-[#e50914] font-semibold mb-2">
+              {remainingMins}m remaining
+            </p>
+          )}
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">
             {movie.description}
           </p>

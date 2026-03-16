@@ -1,14 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Play,
-  Plus,
-  Star,
-} from "lucide-react";
+import { Clock, Play, Plus, Star } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Movie } from "../backend";
 
@@ -27,8 +20,8 @@ export default function HeroBanner({
 }: HeroBannerProps) {
   const [active, setActive] = useState(0);
   const [fadeKey, setFadeKey] = useState(0);
-  const [hovered, setHovered] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const touchStartX = useRef<number | null>(null);
 
   const goTo = useCallback((idx: number) => {
     setActive(idx);
@@ -36,20 +29,45 @@ export default function HeroBanner({
   }, []);
 
   const next = useCallback(() => {
-    goTo((active + 1) % movies.length);
-  }, [active, movies.length, goTo]);
-
-  const prev = useCallback(() => {
-    goTo((active - 1 + movies.length) % movies.length);
-  }, [active, movies.length, goTo]);
+    setActive((prev) => {
+      const idx = (prev + 1) % movies.length;
+      setFadeKey((k) => k + 1);
+      return idx;
+    });
+  }, [movies.length]);
 
   useEffect(() => {
-    if (movies.length <= 1 || hovered) return;
-    intervalRef.current = setInterval(next, 6000);
+    if (movies.length <= 1) return;
+    intervalRef.current = setInterval(next, 5000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [movies.length, hovered, next]);
+  }, [movies.length, next]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) {
+        setActive((prev) => {
+          const idx = (prev + 1) % movies.length;
+          setFadeKey((k) => k + 1);
+          return idx;
+        });
+      } else {
+        setActive((prev) => {
+          const idx = (prev - 1 + movies.length) % movies.length;
+          setFadeKey((k) => k + 1);
+          return idx;
+        });
+      }
+    }
+    touchStartX.current = null;
+  };
 
   if (movies.length === 0) return null;
 
@@ -60,10 +78,10 @@ export default function HeroBanner({
   return (
     <div
       className="relative w-full min-h-[85vh] flex items-end overflow-hidden"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
-      {/* Background image with crossfade */}
+      {/* Background image with fade transition */}
       <div
         key={fadeKey}
         className="absolute inset-0 bg-center bg-cover hero-slide-enter"
@@ -74,30 +92,6 @@ export default function HeroBanner({
       />
       <div className="absolute inset-0 hero-gradient" />
       <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/50 to-transparent" />
-
-      {/* Prev/Next arrows */}
-      {movies.length > 1 && (
-        <>
-          <button
-            type="button"
-            data-ocid="hero.prev_button"
-            onClick={prev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-black/40 border border-white/20 flex items-center justify-center text-white hover:bg-black/70 hover:border-white/50 transition-all backdrop-blur-sm"
-            aria-label="Previous"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            data-ocid="hero.next_button"
-            onClick={next}
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-black/40 border border-white/20 flex items-center justify-center text-white hover:bg-black/70 hover:border-white/50 transition-all backdrop-blur-sm"
-            aria-label="Next"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </>
-      )}
 
       {/* Content */}
       <div className="relative z-10 w-full max-w-[1800px] mx-auto px-4 sm:px-8 pb-24 pt-32">

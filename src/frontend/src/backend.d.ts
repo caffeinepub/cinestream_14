@@ -54,10 +54,12 @@ export interface backendInterface {
     getMovieById(id: bigint): Promise<Movie>;
     getMoviesByCategory(category: string): Promise<Array<Movie>>;
     getTMDBWatchlistIds(): Promise<Array<bigint>>;
+    getTopGenres(): Promise<Array<bigint>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWatchlistIds(): Promise<Array<bigint>>;
     initialize(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    recordGenreInteraction(genreIds: Array<bigint>, weight: bigint): Promise<void>;
     removeFromTMDBWatchlist(tmdbMovieId: bigint): Promise<void>;
     removeFromWatchlist(movieId: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;

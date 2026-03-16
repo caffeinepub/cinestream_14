@@ -172,7 +172,6 @@ export function useRemoveContinueWatching() {
   return useMutation({
     mutationFn: async (movieId: bigint) => {
       if (!actor) throw new Error("Not authenticated");
-      // Setting progress to 0 removes it from the backend list
       return actor.updateContinueWatching(movieId, 0n);
     },
     onSuccess: () => {
@@ -228,4 +227,29 @@ export function useAdminMutations() {
   });
 
   return { addMovie, updateMovie, deleteMovie };
+}
+
+export function useTopGenres() {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint[]>({
+    queryKey: ["topGenres"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getTopGenres();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useRecordGenreInteraction() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async ({
+      genreIds,
+      weight,
+    }: { genreIds: bigint[]; weight: bigint }) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.recordGenreInteraction(genreIds, weight);
+    },
+  });
 }

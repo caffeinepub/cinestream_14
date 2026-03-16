@@ -137,10 +137,12 @@ export interface backendInterface {
     getMovieById(id: bigint): Promise<Movie>;
     getMoviesByCategory(category: string): Promise<Array<Movie>>;
     getTMDBWatchlistIds(): Promise<Array<bigint>>;
+    getTopGenres(): Promise<Array<bigint>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWatchlistIds(): Promise<Array<bigint>>;
     initialize(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    recordGenreInteraction(genreIds: Array<bigint>, weight: bigint): Promise<void>;
     removeFromTMDBWatchlist(tmdbMovieId: bigint): Promise<void>;
     removeFromWatchlist(movieId: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
@@ -347,6 +349,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getTopGenres(): Promise<Array<bigint>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getTopGenres();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getTopGenres();
+            return result;
+        }
+    }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
@@ -400,6 +416,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.isCallerAdmin();
+            return result;
+        }
+    }
+    async recordGenreInteraction(arg0: Array<bigint>, arg1: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.recordGenreInteraction(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.recordGenreInteraction(arg0, arg1);
             return result;
         }
     }

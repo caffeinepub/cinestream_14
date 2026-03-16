@@ -5,7 +5,9 @@ import AuthModal from "../components/AuthModal";
 import Footer from "../components/Footer";
 import HeroBanner from "../components/HeroBanner";
 import MovieRow from "../components/MovieRow";
+import MyWatchlistRow from "../components/MyWatchlistRow";
 import Navbar from "../components/Navbar";
+import RecommendedRow from "../components/RecommendedRow";
 import TMDBCategoryRow from "../components/TMDBCategoryRow";
 import TMDBGenreRow from "../components/TMDBGenreRow";
 import TMDBHeroBanner from "../components/TMDBHeroBanner";
@@ -57,7 +59,6 @@ export default function HomePage() {
   };
 
   const continueWatchingPairs = continueWatchingQuery.data ?? [];
-
   const allMovies = allMoviesQuery.data ?? [];
   const continueMovies = continueWatchingPairs
     .map(([id]) => allMovies.find((m) => m.id === id))
@@ -76,14 +77,16 @@ export default function HomePage() {
       ) : (
         <TMDBHeroBanner />
       )}
+
       <main className="py-8">
-        {/* Top 10 Trending — Netflix-style ranked row */}
+        {/* 1. Top 10 Trending — Netflix-style ranked row */}
         <Top10TrendingRow />
 
-        {/* Continue Watching — only shown when logged in */}
+        {/* 2. Continue Watching — only when logged in with progress */}
         {isLoggedIn && continueMovies.length > 0 && (
           <MovieRow
             title="Continue Watching"
+            label="RESUME"
             movies={continueMovies}
             watchlistIds={watchlistIds}
             continueWatching={continueWatchingPairs}
@@ -92,19 +95,37 @@ export default function HomePage() {
           />
         )}
 
-        {/* All rows load real data from TMDB */}
+        {/* 3. Recommended For You — only when logged in */}
+        <RecommendedRow />
+
+        {/* 4. My Watchlist — only when logged in and has items */}
+        <MyWatchlistRow />
+
+        {/* 5. Trending Now */}
         <TMDBTrendingRow />
+
+        {/* 6. Popular Movies */}
         <TMDBCategoryRow title="Popular Movies" category="popular" />
+
+        {/* 7. Top Rated */}
         <TMDBCategoryRow title="Top Rated Movies" category="top_rated" />
+
+        {/* 8. Latest Releases */}
         <TMDBCategoryRow title="Latest Releases" category="now_playing" />
+
+        {/* 9. Genre rows */}
         <TMDBGenreRow title="Action Movies" genreId={28} />
         <TMDBGenreRow title="Comedy Movies" genreId={35} />
         <TMDBGenreRow title="Horror Movies" genreId={27} />
         <TMDBGenreRow title="Sci-Fi Movies" genreId={878} />
         <TMDBGenreRow title="Romance Movies" genreId={10749} />
+
+        {/* 10. Upcoming */}
         <TMDBCategoryRow title="Upcoming Movies" category="upcoming" />
       </main>
+
       <Footer />
+
       <AuthModal
         open={authModalOpen}
         onClose={() => setAuthModalOpen(false)}

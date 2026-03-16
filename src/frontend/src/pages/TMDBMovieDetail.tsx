@@ -12,11 +12,12 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import TMDBMovieCard from "../components/TMDBMovieCard";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
+  useRecordGenreInteraction,
   useTMDBWatchlistIds,
   useTMDBWatchlistMutations,
 } from "../hooks/useQueries";
@@ -38,6 +39,29 @@ export default function TMDBMovieDetailPage() {
   const { data: watchlistIds } = useTMDBWatchlistIds();
   const { addToTMDBWatchlist, removeFromTMDBWatchlist } =
     useTMDBWatchlistMutations();
+  const { mutate: recordGenreMutate } = useRecordGenreInteraction();
+  const hasRecordedRef = useRef(false);
+
+  const recordGenreInteraction = useCallback(
+    (genreIds: bigint[]) => {
+      recordGenreMutate({ genreIds, weight: 1n });
+    },
+    [recordGenreMutate],
+  );
+
+  // Record genre interaction once on page load when movie data is available
+  useEffect(() => {
+    if (
+      isLoggedIn &&
+      movie &&
+      movie.genres &&
+      movie.genres.length > 0 &&
+      !hasRecordedRef.current
+    ) {
+      hasRecordedRef.current = true;
+      recordGenreInteraction(movie.genres.map((g) => BigInt(g.id)));
+    }
+  }, [isLoggedIn, movie, recordGenreInteraction]);
 
   const inWatchlist =
     isLoggedIn && (watchlistIds ?? []).some((wid) => wid === BigInt(movieId));
@@ -128,11 +152,9 @@ export default function TMDBMovieDetailPage() {
         ) : (
           <div className="w-full h-full bg-secondary" />
         )}
-        {/* Gradient overlays */}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
 
-        {/* Back button */}
         <button
           type="button"
           data-ocid="tmdb_detail.button"
@@ -145,7 +167,6 @@ export default function TMDBMovieDetailPage() {
           <span className="text-sm font-medium hidden sm:block">Back</span>
         </button>
 
-        {/* Title over backdrop */}
         <div className="absolute bottom-8 left-4 sm:left-8 right-4 sm:right-8 z-10">
           {isLoading ? (
             <>
@@ -167,11 +188,10 @@ export default function TMDBMovieDetailPage() {
         </div>
       </div>
 
-      {/* Content below backdrop */}
+      {/* Content */}
       <div className="px-4 sm:px-8 py-8">
         <div className="max-w-5xl mx-auto">
           <div className="flex flex-col md:flex-row gap-8">
-            {/* Poster */}
             <div className="flex-shrink-0 w-full md:w-52">
               {isLoading ? (
                 <Skeleton className="aspect-[2/3] rounded-lg skeleton-shimmer bg-transparent" />
@@ -190,7 +210,6 @@ export default function TMDBMovieDetailPage() {
               )}
             </div>
 
-            {/* Details */}
             <div className="flex-1 min-w-0">
               {isLoading ? (
                 <div className="space-y-3">
@@ -205,7 +224,6 @@ export default function TMDBMovieDetailPage() {
                     {movie?.title}
                   </h2>
 
-                  {/* Meta row */}
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     {movie?.release_date && (
                       <span className="text-sm font-semibold text-foreground bg-secondary px-2 py-0.5 rounded">
@@ -228,7 +246,6 @@ export default function TMDBMovieDetailPage() {
                     </span>
                   </div>
 
-                  {/* Genres */}
                   {movie?.genres && movie.genres.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-4">
                       {movie.genres.map((g) => (
@@ -242,12 +259,10 @@ export default function TMDBMovieDetailPage() {
                     </div>
                   )}
 
-                  {/* Overview */}
                   <p className="text-muted-foreground leading-relaxed text-sm sm:text-base mb-6">
                     {movie?.overview}
                   </p>
 
-                  {/* Action Buttons */}
                   <div className="flex flex-wrap gap-3">
                     <Button
                       data-ocid="tmdb_detail.primary_button"

@@ -2,6 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRef } from "react";
 import type { TMDBMovie } from "../types/tmdb";
+import SectionHeader from "./SectionHeader";
 import TMDBMovieCard from "./TMDBMovieCard";
 
 const SKELETON_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5", "sk-6"];
@@ -21,6 +22,7 @@ function SkeletonCard() {
 
 interface TMDBMovieRowUIProps {
   title: string;
+  label?: string;
   movies: TMDBMovie[] | undefined;
   isLoading: boolean;
   isError: boolean;
@@ -28,6 +30,7 @@ interface TMDBMovieRowUIProps {
 
 export function TMDBMovieRowUI({
   title,
+  label,
   movies,
   isLoading,
   isError,
@@ -45,9 +48,7 @@ export function TMDBMovieRowUI({
 
   return (
     <section className="mb-10 group/row" data-ocid="tmdb_row.section">
-      <h2 className="font-display font-bold text-xl sm:text-2xl text-foreground mb-4 px-4 sm:px-8">
-        {title}
-      </h2>
+      <SectionHeader title={title} label={label} />
 
       {isError && (
         <p
@@ -74,7 +75,7 @@ export function TMDBMovieRowUI({
           <div
             ref={scrollRef}
             className="flex gap-3 overflow-x-auto scrollbar-hide px-4 sm:px-8 pb-4"
-            style={{ overflowY: "visible" }}
+            style={{ overflowY: "visible", WebkitOverflowScrolling: "touch" }}
           >
             {isLoading
               ? SKELETON_KEYS.map((k) => <SkeletonCard key={k} />)

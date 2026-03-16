@@ -1,46 +1,57 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRef } from "react";
-import type { Movie } from "../backend";
-import MovieCard from "./MovieCard";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useTopGenres } from "../hooks/useQueries";
+import type { TMDBMovie } from "../types/tmdb";
 import SectionHeader from "./SectionHeader";
+import TMDBMovieCard from "./TMDBMovieCard";
 
+const TMDB_API_KEY = "fadb0b01b6573c9e09695a7b0498aa71";
 const SKELETON_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5", "sk-6"];
-
-interface MovieRowProps {
-  title: string;
-  label?: string;
-  movies: Movie[];
-  watchlistIds?: bigint[];
-  continueWatching?: [bigint, bigint][];
-  onWatchlistToggle?: (movie: Movie) => void;
-  isLoggedIn?: boolean;
-  isLoading?: boolean;
-}
 
 function SkeletonCard() {
   return (
-    <div
-      className="flex-shrink-0 w-40 sm:w-44 md:w-48"
-      data-ocid="movie_card.loading_state"
-    >
+    <div className="flex-shrink-0 w-36 sm:w-40 md:w-44">
       <Skeleton className="aspect-[2/3] rounded-md skeleton-shimmer bg-transparent" />
       <Skeleton className="mt-2 h-3 w-3/4 rounded skeleton-shimmer bg-transparent" />
+      <Skeleton className="mt-1 h-3 w-1/2 rounded skeleton-shimmer bg-transparent" />
     </div>
   );
 }
 
-export default function MovieRow({
-  title,
-  label,
-  movies,
-  watchlistIds = [],
-  continueWatching = [],
-  onWatchlistToggle,
-  isLoggedIn = false,
-  isLoading = false,
-}: MovieRowProps) {
+function useRecommended(genreParam: string, enabled: boolean) {
+  return useQuery<TMDBMovie[]>({
+    queryKey: ["recommended", genreParam],
+    queryFn: async () => {
+      const url = genreParam
+        ? `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreParam}&sort_by=popularity.desc&page=1`
+        : `https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_API_KEY}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      return (data.results as TMDBMovie[]).slice(0, 20);
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export default function RecommendedRow() {
+  const { loginStatus, identity } = useInternetIdentity();
+  const isLoggedIn = loginStatus === "success" && !!identity;
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const topGenresQuery = useTopGenres();
+  const genreIds = (topGenresQuery.data ?? []).map((g) => Number(g));
+  const genreParam = genreIds.join(",");
+
+  const { data: movies, isLoading } = useRecommended(
+    genreParam,
+    isLoggedIn && !topGenresQuery.isLoading,
+  );
+
   const scroll = (dir: "left" | "right") => {
     if (!scrollRef.current) return;
     const amount = scrollRef.current.clientWidth * 0.75;
@@ -49,13 +60,13 @@ export default function MovieRow({
       behavior: "smooth",
     });
   };
-  const continueMap = new Map(
-    continueWatching.map(([id, prog]) => [id.toString(), Number(prog)]),
-  );
-  if (!isLoading && movies.length === 0) return null;
+
+  if (!isLoggedIn) return null;
+
   return (
-    <section className="mb-10 group/row">
-      <SectionHeader title={title} label={label} />
+    <section className="mb-10 group/row" data-ocid="recommended_row.section">
+      <SectionHeader title="Recommended For You" label="PERSONALISED" />
+
       <div className="relative">
         <button
           type="button"
@@ -67,6 +78,7 @@ export default function MovieRow({
             <ChevronLeft className="w-5 h-5 text-white" />
           </div>
         </button>
+
         <div
           ref={scrollRef}
           className="flex gap-3 overflow-x-auto scrollbar-hide px-4 sm:px-8 pb-4"
@@ -74,18 +86,11 @@ export default function MovieRow({
         >
           {isLoading
             ? SKELETON_KEYS.map((k) => <SkeletonCard key={k} />)
-            : movies.map((movie, i) => (
-                <MovieCard
-                  key={movie.id.toString()}
-                  movie={movie}
-                  index={i + 1}
-                  progress={continueMap.get(movie.id.toString())}
-                  isInWatchlist={watchlistIds.some((id) => id === movie.id)}
-                  onWatchlistToggle={onWatchlistToggle}
-                  isLoggedIn={isLoggedIn}
-                />
+            : (movies ?? []).map((movie, i) => (
+                <TMDBMovieCard key={movie.id} movie={movie} index={i + 1} />
               ))}
         </div>
+
         <button
           type="button"
           onClick={() => scroll("right")}
