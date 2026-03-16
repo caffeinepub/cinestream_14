@@ -4,6 +4,7 @@ import {
   fetchMovieDetail,
   fetchMovieVideos,
   fetchMoviesByGenre,
+  fetchNowPlayingMovies,
   fetchPopularMovies,
   fetchSearchMovies,
   fetchSimilarMovies,
@@ -53,6 +54,17 @@ export function useTMDBUpcoming() {
     queryKey: ["tmdb", "upcoming"],
     queryFn: async () => {
       const data = await fetchUpcomingMovies();
+      return data.results;
+    },
+    staleTime: STALE,
+  });
+}
+
+export function useTMDBNowPlaying() {
+  return useQuery<TMDBMovie[]>({
+    queryKey: ["tmdb", "now_playing"],
+    queryFn: async () => {
+      const data = await fetchNowPlayingMovies();
       return data.results;
     },
     staleTime: STALE,

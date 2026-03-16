@@ -21,7 +21,10 @@ import Navbar from "../components/Navbar";
 import { SAMPLE_MOVIES } from "../data/sampleMovies";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
+  useAllMovies,
+  useContinueWatching,
   useMovieById,
+  useRemoveContinueWatching,
   useUpdateContinueWatching,
   useWatchlistIds,
   useWatchlistMutations,
@@ -43,39 +46,128 @@ export default function MoviePlayerPage() {
     x: number;
     time: string;
   } | null>(null);
+  const [progressRestored, setProgressRestored] = useState(false);
 
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+  const playerProgressRef = useRef(playerProgress);
+  const isPlayingRef = useRef(isPlaying);
+  const isLoggedInRef = useRef(isLoggedIn);
+
+  // Keep refs in sync so interval/cleanup callbacks always have fresh values
+  useEffect(() => {
+    playerProgressRef.current = playerProgress;
+  }, [playerProgress]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    isLoggedInRef.current = isLoggedIn;
+  }, [isLoggedIn]);
 
   const movieId = BigInt(id);
   const movieQuery = useMovieById(movieId);
+  const allMoviesQuery = useAllMovies();
   const watchlistIdsQuery = useWatchlistIds();
+  const continueWatchingQuery = useContinueWatching();
   const { addToWatchlist, removeFromWatchlist } = useWatchlistMutations();
   const updateContinueWatching = useUpdateContinueWatching();
+  const removeContinueWatching = useRemoveContinueWatching();
 
-  const movie = movieQuery.data ?? SAMPLE_MOVIES.find((m) => m.id === movieId);
+  // Store mutation functions in refs so effects don't need them as deps
+  const updateContinueWatchingRef = useRef(updateContinueWatching.mutate);
+  const removeContinueWatchingRef = useRef(removeContinueWatching.mutate);
+  useEffect(() => {
+    updateContinueWatchingRef.current = updateContinueWatching.mutate;
+  }, [updateContinueWatching.mutate]);
+  useEffect(() => {
+    removeContinueWatchingRef.current = removeContinueWatching.mutate;
+  }, [removeContinueWatching.mutate]);
+
+  // Resolve movie from backend or sample data
+  const allMovies = allMoviesQuery.data ?? [];
+  const movie =
+    movieQuery.data ??
+    allMovies.find((m) => m.id === movieId) ??
+    SAMPLE_MOVIES.find((m) => m.id === movieId);
+
   const watchlistIds = watchlistIdsQuery.data ?? [];
   const isInWatchlist = watchlistIds.some((wid) => wid === movieId);
   const thumbnailUrl =
     movie?.thumbnailUrl || `https://picsum.photos/seed/${id}/1920/1080`;
 
   const totalSeconds = movie ? Number(movie.duration) * 60 : 7200;
+  const totalSecondsRef = useRef(totalSeconds);
+  useEffect(() => {
+    totalSecondsRef.current = totalSeconds;
+  }, [totalSeconds]);
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  // Helper: save or remove based on current progress
+  const saveProgress = useCallback((movieIdArg: bigint) => {
+    const total = totalSecondsRef.current;
+    const currentSeconds = (playerProgressRef.current / 100) * total;
+    const ratio = total > 0 ? currentSeconds / total : 0;
+    if (ratio > 0.9) {
+      removeContinueWatchingRef.current(movieIdArg);
+    } else if (currentSeconds > 0) {
+      updateContinueWatchingRef.current({
+        movieId: movieIdArg,
+        progress: BigInt(Math.floor(currentSeconds)),
+      });
+    }
+  }, []);
+
+  // Restore saved progress on mount (once continueWatching data is loaded)
+  useEffect(() => {
+    if (progressRestored) return;
+    if (!continueWatchingQuery.data) return;
+    const entry = continueWatchingQuery.data.find(([mid]) => mid === movieId);
+    if (entry) {
+      const savedSeconds = Number(entry[1]);
+      if (savedSeconds > 0 && totalSeconds > 0) {
+        const pct = (savedSeconds / totalSeconds) * 100;
+        setPlayerProgress(Math.min(pct, 99));
+      }
+    }
+    setProgressRestored(true);
+  }, [continueWatchingQuery.data, movieId, totalSeconds, progressRestored]);
+
+  // Interval-based progress saving every 5 seconds while playing
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const interval = setInterval(() => {
+      if (!isPlayingRef.current) return;
+      saveProgress(movieId);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn, movieId, saveProgress]);
+
+  // Save progress on unmount
+  useEffect(() => {
+    return () => {
+      if (!isLoggedInRef.current) return;
+      saveProgress(movieId);
+    };
+  }, [movieId, saveProgress]);
+
   // Controls auto-hide
   const resetHideTimer = useCallback(() => {
     setControlsVisible(true);
     if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current);
     hideControlsTimer.current = setTimeout(() => {
-      if (isPlaying) setControlsVisible(false);
+      if (isPlayingRef.current) setControlsVisible(false);
     }, 3000);
-  }, [isPlaying]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -146,26 +238,19 @@ export default function MoviePlayerPage() {
   };
 
   const handlePlayToggle = useCallback(() => {
-    const next = !isPlaying;
+    const next = !isPlayingRef.current;
     setIsPlaying(next);
     if (next) {
       setIsBuffering(true);
       setTimeout(() => setIsBuffering(false), 1500);
-      if (isLoggedIn) {
-        const progress = Math.min(playerProgress + 5, 100);
-        setPlayerProgress(progress);
-        updateContinueWatching.mutate({ movieId, progress: BigInt(progress) });
+    } else {
+      // Save progress immediately on pause
+      if (isLoggedInRef.current) {
+        saveProgress(movieId);
       }
     }
     resetHideTimer();
-  }, [
-    isPlaying,
-    isLoggedIn,
-    playerProgress,
-    movieId,
-    updateContinueWatching,
-    resetHideTimer,
-  ]);
+  }, [movieId, saveProgress, resetHideTimer]);
 
   // Seek bar interaction
   const getProgressFromEvent = (e: React.MouseEvent | MouseEvent) => {

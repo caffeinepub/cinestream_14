@@ -166,6 +166,21 @@ export function useUpdateContinueWatching() {
   });
 }
 
+export function useRemoveContinueWatching() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (movieId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      // Setting progress to 0 removes it from the backend list
+      return actor.updateContinueWatching(movieId, 0n);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["continueWatching"] });
+    },
+  });
+}
+
 export function useAdminCheck() {
   const { actor, isFetching } = useActor();
   return useQuery<boolean>({

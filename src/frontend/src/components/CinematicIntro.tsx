@@ -4,81 +4,103 @@ interface CinematicIntroProps {
   onComplete: () => void;
 }
 
+function playCinematicSound(ctx: AudioContext) {
+  const now = ctx.currentTime;
+
+  const makeOscLayer = (
+    type: OscillatorType,
+    freq: number,
+    freqEnd: number | null,
+    gainPeak: number,
+    attackTime: number,
+    sustainEnd: number,
+    releaseEnd: number,
+  ) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    if (freqEnd !== null) {
+      osc.frequency.linearRampToValueAtTime(freqEnd, now + sustainEnd);
+    }
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(gainPeak, now + attackTime);
+    gain.gain.setValueAtTime(gainPeak, now + sustainEnd);
+    gain.gain.linearRampToValueAtTime(0, now + releaseEnd);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + releaseEnd + 0.05);
+  };
+
+  // Deep bass rumble
+  makeOscLayer("sine", 50, null, 0.5, 0.05, 0.6, 1.8);
+  // Sub-bass thud
+  makeOscLayer("sine", 90, 60, 0.6, 0.01, 0.3, 0.8);
+  // Mid cinematic swell
+  makeOscLayer("sine", 180, 400, 0.2, 0.2, 1.4, 2.0);
+  // High shimmer
+  makeOscLayer("sine", 800, 1200, 0.06, 0.4, 1.6, 2.0);
+}
+
 export default function CinematicIntro({ onComplete }: CinematicIntroProps) {
   const [visible, setVisible] = useState(true);
   const [logoVisible, setLogoVisible] = useState(false);
   const hasPlayed = useRef(false);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const soundPlayedRef = useRef(false);
 
   useEffect(() => {
     if (hasPlayed.current) return;
     hasPlayed.current = true;
 
-    // Small delay so logo fade-in starts after component mounts
+    // Show logo after short delay
     const logoTimer = setTimeout(() => setLogoVisible(true), 50);
 
-    // Play cinematic intro sound via Web Audio API
+    // Create AudioContext
     try {
       const AudioContextClass =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext })
           .webkitAudioContext;
       const ctx = new AudioContextClass();
-      const now = ctx.currentTime;
+      ctxRef.current = ctx;
 
-      const makeLayer = (
-        type: OscillatorType,
-        freq: number,
-        freqEnd: number | null,
-        gainPeak: number,
-        gainRampDelay: number,
-        gainRampDuration: number,
-      ) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, now);
-        if (freqEnd !== null) {
-          osc.frequency.linearRampToValueAtTime(freqEnd, now + 1.5);
-        }
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(gainPeak, now + gainRampDelay);
-        gain.gain.linearRampToValueAtTime(
-          0,
-          now + gainRampDelay + gainRampDuration,
-        );
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 2.2);
+      const tryPlay = () => {
+        if (soundPlayedRef.current) return;
+        ctx.resume().then(() => {
+          if (soundPlayedRef.current) return;
+          if (ctx.state === "running") {
+            soundPlayedRef.current = true;
+            playCinematicSound(ctx);
+          }
+        });
       };
 
-      // Layer 1: deep bass rumble
-      makeLayer("sine", 55, null, 0.4, 0.3, 1.5);
-      // Layer 2: sub-bass thud
-      makeLayer("sine", 80, null, 0.5, 0.01, 0.5);
-      // Layer 3: rising cinematic tone
-      (() => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(200, now);
-        osc.frequency.linearRampToValueAtTime(600, now + 1.5);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.setValueAtTime(0.15, now + 1.8);
-        gain.gain.linearRampToValueAtTime(0, now + 2.2);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 2.2);
-      })();
+      // Try immediately (works when browser allows autoplay)
+      tryPlay();
+
+      // If still suspended, unlock on first user gesture
+      const unlock = () => {
+        tryPlay();
+        document.removeEventListener("click", unlock);
+        document.removeEventListener("touchstart", unlock);
+        document.removeEventListener("keydown", unlock);
+      };
+      document.addEventListener("click", unlock);
+      document.addEventListener("touchstart", unlock);
+      document.addEventListener("keydown", unlock);
     } catch (_e) {
-      // AudioContext blocked by browser policy — fail silently
+      // AudioContext not available — skip sound silently
     }
 
-    // Start fade-out after 2000ms
-    const fadeTimer = setTimeout(() => setVisible(false), 2000);
-    // Call onComplete after fade-out transition (500ms)
-    const completeTimer = setTimeout(() => onComplete(), 2500);
+    // Fade out intro after 2200ms
+    const fadeTimer = setTimeout(() => setVisible(false), 2200);
+    // Complete transition after fade (500ms)
+    const completeTimer = setTimeout(() => {
+      ctxRef.current?.close();
+      onComplete();
+    }, 2700);
 
     return () => {
       clearTimeout(logoTimer);
@@ -102,6 +124,7 @@ export default function CinematicIntro({ onComplete }: CinematicIntroProps) {
         opacity: visible ? 1 : 0,
         transition: "opacity 0.5s ease-out",
         pointerEvents: visible ? "all" : "none",
+        cursor: "default",
       }}
       data-ocid="intro.panel"
     >

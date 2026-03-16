@@ -1,11 +1,12 @@
 import {
+  useTMDBNowPlaying,
   useTMDBPopular,
   useTMDBTopRated,
   useTMDBUpcoming,
 } from "../hooks/useTMDB";
 import { TMDBMovieRowUI } from "./TMDBMovieRow";
 
-type Category = "popular" | "top_rated" | "upcoming";
+type Category = "popular" | "top_rated" | "upcoming" | "now_playing";
 
 interface TMDBCategoryRowProps {
   title: string;
@@ -19,11 +20,13 @@ export default function TMDBCategoryRow({
   const popular = useTMDBPopular();
   const topRated = useTMDBTopRated();
   const upcoming = useTMDBUpcoming();
+  const nowPlaying = useTMDBNowPlaying();
 
   const queryMap = {
     popular,
     top_rated: topRated,
     upcoming,
+    now_playing: nowPlaying,
   };
 
   const { data, isLoading, isError } = queryMap[category];

@@ -37,6 +37,10 @@ export async function fetchUpcomingMovies(): Promise<TMDBTrendingResponse> {
   return tmdbFetch<TMDBTrendingResponse>("/movie/upcoming");
 }
 
+export async function fetchNowPlayingMovies(): Promise<TMDBTrendingResponse> {
+  return tmdbFetch<TMDBTrendingResponse>("/movie/now_playing");
+}
+
 export async function fetchMoviesByGenre(
   genreId: number,
 ): Promise<TMDBTrendingResponse> {
