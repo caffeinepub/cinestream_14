@@ -13,12 +13,15 @@ import {
   Menu,
   Search,
   Settings,
+  Star,
   User,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useAdminCheck } from "../hooks/useQueries";
+import { useTMDBSearch } from "../hooks/useTMDB";
+import { getReleaseYear, tmdbImage } from "../services/tmdb";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -28,14 +31,32 @@ export default function Navbar() {
   const { login, clear, loginStatus, identity } = useInternetIdentity();
   const navigate = useNavigate();
   const isLoggedIn = loginStatus === "success" && !!identity;
+  const searchRef = useRef<HTMLDivElement>(null);
 
   const { data: isAdmin } = useAdminCheck();
+  const { data: searchResults, isFetching: isSearching } =
+    useTMDBSearch(searchValue);
+
+  const showDropdown = searchOpen && searchValue.length >= 2;
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 60);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+        setSearchValue("");
+      }
+    };
+    if (searchOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [searchOpen]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +65,19 @@ export default function Navbar() {
       setSearchOpen(false);
       setSearchValue("");
     }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setSearchOpen(false);
+      setSearchValue("");
+    }
+  };
+
+  const handleResultClick = (movieId: number) => {
+    navigate({ to: "/tmdb/$id", params: { id: String(movieId) } });
+    setSearchOpen(false);
+    setSearchValue("");
   };
 
   return (
@@ -93,36 +127,125 @@ export default function Navbar() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {searchOpen ? (
-            <form onSubmit={handleSearch} className="flex items-center gap-2">
-              <Input
-                autoFocus
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Search movies..."
-                className="w-48 sm:w-64 h-8 bg-black/60 border-border text-sm"
-                data-ocid="nav.search_input"
-              />
+          {/* Search with live dropdown */}
+          <div ref={searchRef} className="relative">
+            {searchOpen ? (
+              <form onSubmit={handleSearch} className="flex items-center gap-2">
+                <Input
+                  autoFocus
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Search movies..."
+                  className="w-48 sm:w-64 h-8 bg-black/60 border-border text-sm"
+                  data-ocid="nav.search_input"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setSearchValue("");
+                  }}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </form>
+            ) : (
               <Button
-                type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
-                onClick={() => setSearchOpen(false)}
+                className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                onClick={() => setSearchOpen(true)}
+                data-ocid="nav.search_input"
               >
-                <X className="w-4 h-4" />
+                <Search className="w-5 h-5" />
               </Button>
-            </form>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 text-muted-foreground hover:text-foreground"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search className="w-5 h-5" />
-            </Button>
-          )}
+            )}
+
+            {/* Live search dropdown */}
+            {showDropdown && (
+              <div
+                data-ocid="nav.popover"
+                className="absolute top-full right-0 mt-2 w-80 sm:w-96 bg-black/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl overflow-hidden z-[100]"
+              >
+                {isSearching ? (
+                  <div className="p-3 space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
+                      <div key={i} className="flex gap-3 items-center">
+                        <div className="w-10 h-14 rounded skeleton-shimmer flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 w-3/4 skeleton-shimmer rounded" />
+                          <div className="h-3 w-1/2 skeleton-shimmer rounded" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !searchResults || searchResults.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground text-sm">
+                    No results found for &ldquo;{searchValue}&rdquo;
+                  </div>
+                ) : (
+                  <div className="max-h-[420px] overflow-y-auto">
+                    {searchResults.slice(0, 6).map((movie, i) => (
+                      <button
+                        key={movie.id}
+                        type="button"
+                        data-ocid={`nav.item.${i + 1}`}
+                        onClick={() => handleResultClick(movie.id)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 transition-colors text-left group"
+                      >
+                        <div className="flex-shrink-0 w-10 h-14 rounded overflow-hidden bg-secondary">
+                          {movie.poster_path ? (
+                            <img
+                              src={tmdbImage(movie.poster_path, "w92")}
+                              alt={movie.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-secondary" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate group-hover:text-[#e50914] transition-colors">
+                            {movie.title}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {movie.release_date && (
+                              <span className="text-xs text-muted-foreground">
+                                {getReleaseYear(movie.release_date)}
+                              </span>
+                            )}
+                            {movie.vote_average > 0 && (
+                              <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
+                                <Star className="w-3 h-3 fill-[#e50914] text-[#e50914]" />
+                                {movie.vote_average.toFixed(1)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                    {searchResults.length > 6 && (
+                      <button
+                        type="button"
+                        onClick={
+                          handleSearch as unknown as React.MouseEventHandler
+                        }
+                        className="w-full py-3 text-center text-sm text-[#e50914] hover:bg-white/5 transition-colors border-t border-white/10"
+                      >
+                        View all {searchResults.length} results
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {isLoggedIn ? (
             <DropdownMenu>

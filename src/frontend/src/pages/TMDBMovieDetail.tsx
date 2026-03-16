@@ -1,68 +1,107 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowLeft, BookmarkPlus, Check, Play, Star, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  BookmarkPlus,
+  Check,
+  Loader2,
+  Play,
+  Star,
+  X,
+} from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { useTMDBMovieDetail, useTMDBVideos } from "../hooks/useTMDB";
+import TMDBMovieCard from "../components/TMDBMovieCard";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import {
+  useTMDBWatchlistIds,
+  useTMDBWatchlistMutations,
+} from "../hooks/useQueries";
+import { useTMDBMovieDetail, useTMDBSimilar } from "../hooks/useTMDB";
 import { getReleaseYear, tmdbImage } from "../services/tmdb";
-
-const WATCHLIST_KEY = "tmdb_watchlist";
-
-function getWatchlist(): number[] {
-  try {
-    return JSON.parse(localStorage.getItem(WATCHLIST_KEY) ?? "[]") as number[];
-  } catch {
-    return [];
-  }
-}
-
-function setWatchlist(ids: number[]) {
-  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(ids));
-}
 
 export default function TMDBMovieDetailPage() {
   const { id } = useParams({ from: "/tmdb/$id" });
   const movieId = Number(id);
   const navigate = useNavigate();
 
+  const { loginStatus, identity } = useInternetIdentity();
+  const isLoggedIn = loginStatus === "success" && !!identity;
+
   const { data: movie, isLoading } = useTMDBMovieDetail(movieId);
-  const { data: trailer } = useTMDBVideos(movieId);
+  const { data: similarMovies, isLoading: isSimilarLoading } =
+    useTMDBSimilar(movieId);
+
+  const { data: watchlistIds } = useTMDBWatchlistIds();
+  const { addToTMDBWatchlist, removeFromTMDBWatchlist } =
+    useTMDBWatchlistMutations();
+
+  const inWatchlist =
+    isLoggedIn && (watchlistIds ?? []).some((wid) => wid === BigInt(movieId));
 
   const [trailerOpen, setTrailerOpen] = useState(false);
-  const [inWatchlist, setInWatchlist] = useState(false);
-
-  useEffect(() => {
-    const wl = getWatchlist();
-    setInWatchlist(wl.includes(movieId));
-  }, [movieId]);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [trailerLoading, setTrailerLoading] = useState(false);
 
   const handleWatchlistToggle = () => {
-    const wl = getWatchlist();
+    if (!isLoggedIn) {
+      toast.info("Sign in to save to your watchlist");
+      return;
+    }
     if (inWatchlist) {
-      setWatchlist(wl.filter((i) => i !== movieId));
-      setInWatchlist(false);
-      toast.success("Removed from watchlist");
+      removeFromTMDBWatchlist.mutate(movieId, {
+        onSuccess: () => toast.success("Removed from watchlist"),
+      });
     } else {
-      setWatchlist([...wl, movieId]);
-      setInWatchlist(true);
-      toast.success("Added to watchlist");
+      addToTMDBWatchlist.mutate(movieId, {
+        onSuccess: () => toast.success("Added to watchlist"),
+      });
     }
   };
 
-  const handlePlayTrailer = () => {
-    if (!trailer) {
-      toast.error("No trailer available");
-      return;
+  const handlePlayTrailer = async () => {
+    setTrailerLoading(true);
+    try {
+      const url = `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=fadb0b01b6573c9e09695a7b0498aa71`;
+      const res = await fetch(url);
+      const data = await res.json();
+      console.log("TMDB video response:", data);
+
+      const videos: Array<{
+        site: string;
+        type: string;
+        key: string;
+        official?: boolean;
+      }> = data.results ?? [];
+      const youtubeTrailer =
+        videos.find(
+          (v) => v.site === "YouTube" && v.type === "Trailer" && v.official,
+        ) ??
+        videos.find((v) => v.site === "YouTube" && v.type === "Trailer") ??
+        videos.find(
+          (v) => v.site === "YouTube" && v.type === "Teaser" && v.official,
+        ) ??
+        videos.find((v) => v.site === "YouTube" && v.type === "Teaser") ??
+        null;
+
+      console.log("Selected trailer:", youtubeTrailer?.key ?? "none");
+
+      if (!youtubeTrailer) {
+        toast.error("Trailer not available");
+        return;
+      }
+
+      setTrailerKey(youtubeTrailer.key);
+      setTrailerOpen(true);
+    } catch (err) {
+      console.error("Failed to fetch trailer:", err);
+      toast.error("Failed to load trailer");
+    } finally {
+      setTrailerLoading(false);
     }
-    setTrailerOpen(true);
   };
 
   const backdropUrl = tmdbImage(movie?.backdrop_path ?? null, "w1280");
@@ -213,15 +252,29 @@ export default function TMDBMovieDetailPage() {
                     <Button
                       data-ocid="tmdb_detail.primary_button"
                       onClick={handlePlayTrailer}
+                      disabled={trailerLoading}
                       className="bg-white text-black hover:bg-white/90 font-bold gap-2"
                     >
-                      <Play className="w-4 h-4 fill-black" />
-                      Play Trailer
+                      {trailerLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 fill-black" />
+                          Play Trailer
+                        </>
+                      )}
                     </Button>
                     <Button
                       data-ocid="tmdb_detail.secondary_button"
                       variant="outline"
                       onClick={handleWatchlistToggle}
+                      disabled={
+                        addToTMDBWatchlist.isPending ||
+                        removeFromTMDBWatchlist.isPending
+                      }
                       className={`gap-2 border-border hover:border-white ${
                         inWatchlist ? "text-[#e50914] border-[#e50914]/50" : ""
                       }`}
@@ -244,33 +297,91 @@ export default function TMDBMovieDetailPage() {
         </div>
       </div>
 
+      {/* Similar Movies */}
+      {(isSimilarLoading || (similarMovies && similarMovies.length > 0)) && (
+        <div className="px-4 sm:px-8 pb-12">
+          <h2 className="font-display font-bold text-xl sm:text-2xl mb-4 px-0">
+            Similar Movies
+          </h2>
+          {isSimilarLoading ? (
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton row
+                <div key={i} className="flex-shrink-0 w-36 sm:w-44">
+                  <div className="aspect-[2/3] rounded-md skeleton-shimmer" />
+                  <div className="mt-2 h-3 w-3/4 skeleton-shimmer rounded" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide"
+              data-ocid="tmdb_detail.list"
+            >
+              {(similarMovies ?? []).slice(0, 12).map((m, i) => (
+                <div
+                  key={m.id}
+                  className="flex-shrink-0 w-36 sm:w-44"
+                  data-ocid={`tmdb_detail.item.${i + 1}`}
+                >
+                  <TMDBMovieCard movie={m} index={i + 1} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Trailer Modal */}
-      <Dialog open={trailerOpen} onOpenChange={setTrailerOpen}>
+      <Dialog
+        open={trailerOpen}
+        onOpenChange={(open) => {
+          setTrailerOpen(open);
+          if (!open) setTrailerKey(null);
+        }}
+      >
         <DialogContent
+          aria-label="Movie Trailer"
+          showCloseButton={false}
           className="max-w-3xl w-full p-0 overflow-hidden bg-black border-border"
           data-ocid="tmdb_detail.dialog"
         >
-          <DialogHeader className="sr-only">
-            <DialogTitle>Movie Trailer</DialogTitle>
-          </DialogHeader>
-          <div className="relative">
+          <div className="relative w-full">
             <button
               type="button"
               data-ocid="tmdb_detail.close_button"
-              onClick={() => setTrailerOpen(false)}
+              onClick={() => {
+                setTrailerOpen(false);
+                setTrailerKey(null);
+              }}
               className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
             >
               <X className="w-4 h-4 text-white" />
             </button>
-            {trailer && (
-              <div className="aspect-video">
+
+            {trailerKey ? (
+              <div
+                className="w-full"
+                style={{ paddingBottom: "56.25%", position: "relative" }}
+              >
                 <iframe
-                  src={`https://www.youtube.com/embed/${trailer.key}?autoplay=1`}
+                  src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&rel=0&modestbranding=1`}
                   title="Movie Trailer"
-                  allow="autoplay; fullscreen"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    border: 0,
+                  }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
-                  className="w-full h-full"
                 />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-white text-lg">
+                Trailer not available
               </div>
             )}
           </div>

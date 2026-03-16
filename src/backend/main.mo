@@ -12,8 +12,6 @@ import Order "mo:core/Order";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
-// Enable migration with data transformation
-
 actor {
   // Types
   type ContinueWatchingProgress = {
@@ -70,6 +68,9 @@ actor {
 
   // Watchlists: Map from user Principal to List of movie IDs
   let watchlists = Map.empty<Principal, List.List<Nat>>();
+
+  // TMDB Watchlists: Map from user Principal to List of TMDB movie IDs
+  let tmdbWatchlists = Map.empty<Principal, List.List<Nat>>();
 
   // Continue Watching: Map from user Principal to List of ContinueWatchingProgress
   let continueWatching = Map.empty<Principal, List.List<ContinueWatchingProgress>>();
@@ -453,6 +454,53 @@ actor {
       Runtime.trap("Unauthorized: Only authenticated users can access watchlist");
     };
     switch (watchlists.get(caller)) {
+      case (null) { [] };
+      case (?watchlist) { watchlist.toArray() };
+    };
+  };
+
+  // TMDB WATCHLIST METHODS
+
+  public shared ({ caller }) func addToTMDBWatchlist(tmdbMovieId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only authenticated users can add to TMDB watchlist");
+    };
+
+    switch (tmdbWatchlists.get(caller)) {
+      case (null) {
+        let newWatchlist = List.singleton<Nat>(tmdbMovieId);
+        tmdbWatchlists.add(caller, newWatchlist);
+      };
+      case (?existing) {
+        if (existing.contains(tmdbMovieId)) {
+          Runtime.trap("Movie already in your TMDB watchlist");
+        };
+        existing.add(tmdbMovieId);
+      };
+    };
+  };
+
+  public shared ({ caller }) func removeFromTMDBWatchlist(tmdbMovieId : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can remove from TMDB watchlist");
+    };
+    switch (tmdbWatchlists.get(caller)) {
+      case (null) { Runtime.trap("Movie is not in your TMDB watchlist") };
+      case (?existing) {
+        if (not existing.contains(tmdbMovieId)) {
+          Runtime.trap("Movie is not in your TMDB watchlist");
+        };
+        let updatedWatchlist = existing.filter(func(id) { id != tmdbMovieId });
+        tmdbWatchlists.add(caller, updatedWatchlist);
+      };
+    };
+  };
+
+  public query ({ caller }) func getTMDBWatchlistIds() : async [Nat] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can access TMDB watchlist");
+    };
+    switch (tmdbWatchlists.get(caller)) {
       case (null) { [] };
       case (?watchlist) { watchlist.toArray() };
     };

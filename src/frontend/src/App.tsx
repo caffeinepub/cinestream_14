@@ -8,6 +8,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import CinematicIntro from "./components/CinematicIntro";
 import LoadingScreen from "./components/LoadingScreen";
 import AdminPage from "./pages/Admin";
 import HomePage from "./pages/Home";
@@ -45,14 +46,23 @@ function AnimatedOutlet() {
   );
 }
 
-const rootRoute = createRootRoute({
-  component: () => (
+function RootComponent() {
+  const [introComplete, setIntroComplete] = useState(false);
+
+  return (
     <div className="min-h-screen bg-background">
+      {!introComplete && (
+        <CinematicIntro onComplete={() => setIntroComplete(true)} />
+      )}
       <LoadingScreen />
       <AnimatedOutlet />
       <Toaster />
     </div>
-  ),
+  );
+}
+
+const rootRoute = createRootRoute({
+  component: RootComponent,
 });
 
 const homeRoute = createRoute({

@@ -43,6 +43,7 @@ export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addMovie' : IDL.Func([MovieInput], [IDL.Nat], []),
+  'addToTMDBWatchlist' : IDL.Func([IDL.Nat], [], []),
   'addToWatchlist' : IDL.Func([IDL.Nat], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'deleteMovie' : IDL.Func([IDL.Nat], [], []),
@@ -57,6 +58,7 @@ export const idlService = IDL.Service({
   'getFeaturedMovies' : IDL.Func([], [IDL.Vec(Movie)], ['query']),
   'getMovieById' : IDL.Func([IDL.Nat], [Movie], ['query']),
   'getMoviesByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Movie)], ['query']),
+  'getTMDBWatchlistIds' : IDL.Func([], [IDL.Vec(IDL.Nat)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
@@ -65,6 +67,7 @@ export const idlService = IDL.Service({
   'getWatchlistIds' : IDL.Func([], [IDL.Vec(IDL.Nat)], ['query']),
   'initialize' : IDL.Func([], [], []),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'removeFromTMDBWatchlist' : IDL.Func([IDL.Nat], [], []),
   'removeFromWatchlist' : IDL.Func([IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'searchMoviesByTitle' : IDL.Func([IDL.Text], [IDL.Vec(Movie)], ['query']),
@@ -110,6 +113,7 @@ export const idlFactory = ({ IDL }) => {
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addMovie' : IDL.Func([MovieInput], [IDL.Nat], []),
+    'addToTMDBWatchlist' : IDL.Func([IDL.Nat], [], []),
     'addToWatchlist' : IDL.Func([IDL.Nat], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'deleteMovie' : IDL.Func([IDL.Nat], [], []),
@@ -124,6 +128,7 @@ export const idlFactory = ({ IDL }) => {
     'getFeaturedMovies' : IDL.Func([], [IDL.Vec(Movie)], ['query']),
     'getMovieById' : IDL.Func([IDL.Nat], [Movie], ['query']),
     'getMoviesByCategory' : IDL.Func([IDL.Text], [IDL.Vec(Movie)], ['query']),
+    'getTMDBWatchlistIds' : IDL.Func([], [IDL.Vec(IDL.Nat)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
@@ -132,6 +137,7 @@ export const idlFactory = ({ IDL }) => {
     'getWatchlistIds' : IDL.Func([], [IDL.Vec(IDL.Nat)], ['query']),
     'initialize' : IDL.Func([], [], []),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'removeFromTMDBWatchlist' : IDL.Func([IDL.Nat], [], []),
     'removeFromWatchlist' : IDL.Func([IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'searchMoviesByTitle' : IDL.Func([IDL.Text], [IDL.Vec(Movie)], ['query']),

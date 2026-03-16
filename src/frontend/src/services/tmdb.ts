@@ -25,6 +25,26 @@ export async function fetchTrendingMovies(): Promise<TMDBTrendingResponse> {
   return tmdbFetch<TMDBTrendingResponse>("/trending/movie/week");
 }
 
+export async function fetchPopularMovies(): Promise<TMDBTrendingResponse> {
+  return tmdbFetch<TMDBTrendingResponse>("/movie/popular");
+}
+
+export async function fetchTopRatedMovies(): Promise<TMDBTrendingResponse> {
+  return tmdbFetch<TMDBTrendingResponse>("/movie/top_rated");
+}
+
+export async function fetchUpcomingMovies(): Promise<TMDBTrendingResponse> {
+  return tmdbFetch<TMDBTrendingResponse>("/movie/upcoming");
+}
+
+export async function fetchMoviesByGenre(
+  genreId: number,
+): Promise<TMDBTrendingResponse> {
+  return tmdbFetch<TMDBTrendingResponse>(
+    `/discover/movie?with_genres=${genreId}&sort_by=popularity.desc`,
+  );
+}
+
 export async function fetchMovieDetail(id: number): Promise<TMDBMovieDetail> {
   return tmdbFetch<TMDBMovieDetail>(`/movie/${id}`);
 }
@@ -33,6 +53,20 @@ export async function fetchMovieVideos(
   id: number,
 ): Promise<{ results: TMDBVideo[] }> {
   return tmdbFetch<{ results: TMDBVideo[] }>(`/movie/${id}/videos`);
+}
+
+export async function fetchSimilarMovies(
+  id: number,
+): Promise<TMDBTrendingResponse> {
+  return tmdbFetch<TMDBTrendingResponse>(`/movie/${id}/similar`);
+}
+
+export async function fetchSearchMovies(
+  query: string,
+): Promise<TMDBTrendingResponse> {
+  return tmdbFetch<TMDBTrendingResponse>(
+    `/search/movie?query=${encodeURIComponent(query)}`,
+  );
 }
 
 export function getReleaseYear(releaseDate: string): string {

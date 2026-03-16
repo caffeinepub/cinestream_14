@@ -74,6 +74,45 @@ export function useWatchlistIds() {
   });
 }
 
+export function useTMDBWatchlistIds() {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint[]>({
+    queryKey: ["tmdb", "watchlist"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getTMDBWatchlistIds();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useTMDBWatchlistMutations() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  const addToTMDBWatchlist = useMutation({
+    mutationFn: async (tmdbId: number) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.addToTMDBWatchlist(BigInt(tmdbId));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tmdb", "watchlist"] });
+    },
+  });
+
+  const removeFromTMDBWatchlist = useMutation({
+    mutationFn: async (tmdbId: number) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.removeFromTMDBWatchlist(BigInt(tmdbId));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tmdb", "watchlist"] });
+    },
+  });
+
+  return { addToTMDBWatchlist, removeFromTMDBWatchlist };
+}
+
 export function useContinueWatching() {
   const { actor, isFetching } = useActor();
   return useQuery<[bigint, bigint][]>({

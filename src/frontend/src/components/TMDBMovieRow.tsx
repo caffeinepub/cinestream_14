@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRef } from "react";
-import { useTMDBTrending } from "../hooks/useTMDB";
+import type { TMDBMovie } from "../types/tmdb";
 import TMDBMovieCard from "./TMDBMovieCard";
 
 const SKELETON_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5", "sk-6"];
@@ -9,7 +9,7 @@ const SKELETON_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5", "sk-6"];
 function SkeletonCard() {
   return (
     <div
-      className="flex-shrink-0 w-40 sm:w-44 md:w-48"
+      className="flex-shrink-0 w-36 sm:w-40 md:w-44"
       data-ocid="tmdb_card.loading_state"
     >
       <Skeleton className="aspect-[2/3] rounded-md skeleton-shimmer bg-transparent" />
@@ -19,12 +19,19 @@ function SkeletonCard() {
   );
 }
 
-interface TMDBMovieRowProps {
+interface TMDBMovieRowUIProps {
   title: string;
+  movies: TMDBMovie[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
 }
 
-export default function TMDBMovieRow({ title }: TMDBMovieRowProps) {
-  const { data: movies, isLoading, isError } = useTMDBTrending();
+export function TMDBMovieRowUI({
+  title,
+  movies,
+  isLoading,
+  isError,
+}: TMDBMovieRowUIProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (dir: "left" | "right") => {
@@ -43,8 +50,11 @@ export default function TMDBMovieRow({ title }: TMDBMovieRowProps) {
       </h2>
 
       {isError && (
-        <p className="px-4 sm:px-8 text-sm text-red-500 mb-4">
-          Unable to load trending movies. Please try again later.
+        <p
+          className="px-4 sm:px-8 text-sm text-red-500 mb-4"
+          data-ocid="tmdb_row.error_state"
+        >
+          Unable to load movies. Please try again later.
         </p>
       )}
 

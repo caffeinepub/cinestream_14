@@ -6,7 +6,9 @@ import Footer from "../components/Footer";
 import HeroBanner from "../components/HeroBanner";
 import MovieRow from "../components/MovieRow";
 import Navbar from "../components/Navbar";
-import TMDBMovieRow from "../components/TMDBMovieRow";
+import TMDBCategoryRow from "../components/TMDBCategoryRow";
+import TMDBGenreRow from "../components/TMDBGenreRow";
+import TMDBTrendingRow from "../components/TMDBTrendingRow";
 import { SAMPLE_MOVIES } from "../data/sampleMovies";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
@@ -90,7 +92,19 @@ export default function HomePage() {
             isLoggedIn={isLoggedIn}
           />
         )}
-        <TMDBMovieRow title="Trending Now" />
+
+        {/* TMDB Dynamic Rows */}
+        <TMDBTrendingRow />
+        <TMDBCategoryRow title="Popular Movies" category="popular" />
+        <TMDBCategoryRow title="Top Rated Movies" category="top_rated" />
+        <TMDBCategoryRow title="Upcoming Movies" category="upcoming" />
+        <TMDBGenreRow title="Action Movies" genreId={28} />
+        <TMDBGenreRow title="Comedy Movies" genreId={35} />
+        <TMDBGenreRow title="Horror Movies" genreId={27} />
+        <TMDBGenreRow title="Sci-Fi Movies" genreId={878} />
+        <TMDBGenreRow title="Romance Movies" genreId={10749} />
+
+        {/* Admin / Static Rows */}
         <MovieRow
           title="Popular Web Series"
           movies={getMovies(seriesQuery, "web_series")}

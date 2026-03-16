@@ -125,6 +125,7 @@ export enum UserRole {
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addMovie(input: MovieInput): Promise<bigint>;
+    addToTMDBWatchlist(tmdbMovieId: bigint): Promise<void>;
     addToWatchlist(movieId: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     deleteMovie(id: bigint): Promise<void>;
@@ -135,10 +136,12 @@ export interface backendInterface {
     getFeaturedMovies(): Promise<Array<Movie>>;
     getMovieById(id: bigint): Promise<Movie>;
     getMoviesByCategory(category: string): Promise<Array<Movie>>;
+    getTMDBWatchlistIds(): Promise<Array<bigint>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWatchlistIds(): Promise<Array<bigint>>;
     initialize(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    removeFromTMDBWatchlist(tmdbMovieId: bigint): Promise<void>;
     removeFromWatchlist(movieId: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     searchMoviesByTitle(title: string): Promise<Array<Movie>>;
@@ -173,6 +176,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.addMovie(arg0);
+            return result;
+        }
+    }
+    async addToTMDBWatchlist(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addToTMDBWatchlist(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addToTMDBWatchlist(arg0);
             return result;
         }
     }
@@ -316,6 +333,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getTMDBWatchlistIds(): Promise<Array<bigint>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getTMDBWatchlistIds();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getTMDBWatchlistIds();
+            return result;
+        }
+    }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
@@ -369,6 +400,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.isCallerAdmin();
+            return result;
+        }
+    }
+    async removeFromTMDBWatchlist(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.removeFromTMDBWatchlist(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.removeFromTMDBWatchlist(arg0);
             return result;
         }
     }

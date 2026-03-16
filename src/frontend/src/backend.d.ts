@@ -42,6 +42,7 @@ export enum UserRole {
 }
 export interface backendInterface {
     addMovie(input: MovieInput): Promise<bigint>;
+    addToTMDBWatchlist(tmdbMovieId: bigint): Promise<void>;
     addToWatchlist(movieId: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     deleteMovie(id: bigint): Promise<void>;
@@ -52,10 +53,12 @@ export interface backendInterface {
     getFeaturedMovies(): Promise<Array<Movie>>;
     getMovieById(id: bigint): Promise<Movie>;
     getMoviesByCategory(category: string): Promise<Array<Movie>>;
+    getTMDBWatchlistIds(): Promise<Array<bigint>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getWatchlistIds(): Promise<Array<bigint>>;
     initialize(): Promise<void>;
     isCallerAdmin(): Promise<boolean>;
+    removeFromTMDBWatchlist(tmdbMovieId: bigint): Promise<void>;
     removeFromWatchlist(movieId: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     searchMoviesByTitle(title: string): Promise<Array<Movie>>;

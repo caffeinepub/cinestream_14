@@ -14,7 +14,7 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
   const navigate = useNavigate();
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const posterUrl = tmdbImage(movie.poster_path, "w342");
+  const posterUrl = tmdbImage(movie.poster_path, "w185");
 
   const handleClick = () => {
     navigate({ to: "/tmdb/$id", params: { id: movie.id.toString() } });
@@ -24,11 +24,10 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
     <button
       type="button"
       data-ocid={`tmdb_card.item.${index}`}
-      className="group relative flex-shrink-0 w-40 sm:w-44 md:w-48 cursor-pointer text-left bg-transparent border-0 p-0"
+      className="group relative flex-shrink-0 w-36 sm:w-40 md:w-44 cursor-pointer text-left bg-transparent border-0 p-0"
       onClick={handleClick}
     >
       <div className="relative overflow-hidden rounded-md bg-secondary aspect-[2/3] transition-transform duration-300 ease-out group-hover:scale-105 card-glow-hover">
-        {/* Skeleton while loading */}
         {!imgLoaded && !imgError && (
           <Skeleton className="absolute inset-0 skeleton-shimmer bg-transparent" />
         )}
@@ -46,6 +45,7 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
               imgLoaded ? "opacity-100" : "opacity-0"
             }`}
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-secondary/80 p-4">
@@ -55,7 +55,6 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
           </div>
         )}
 
-        {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 flex items-center justify-center">
           <div className="w-11 h-11 rounded-full bg-white/20 border-2 border-white flex items-center justify-center backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             <svg
@@ -69,7 +68,6 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
         </div>
       </div>
 
-      {/* Info below */}
       <p className="mt-2 text-sm text-muted-foreground group-hover:text-foreground transition-colors truncate px-0.5">
         {movie.title}
       </p>
