@@ -4,8 +4,14 @@ import type {
   TMDBTrendingResponse,
   TMDBVideo,
 } from "../types/tmdb";
+import { cachedFetch } from "./tmdbCache";
 
-export const TMDB_API_KEY = "fadb0b01b6573c9e09695a7b0498aa71";
+// Read API key from environment variable — never hardcode in source
+const _apiKey = import.meta.env.VITE_TMDB_API_KEY as string | undefined;
+const apiKeyLoaded = !!_apiKey && _apiKey.length > 0;
+console.log(`[TMDB] API key loaded: ${apiKeyLoaded}`);
+
+export const TMDB_API_KEY = _apiKey ?? "";
 export const TMDB_BASE = "https://api.themoviedb.org/3";
 export const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/";
 
@@ -14,11 +20,17 @@ export function tmdbImage(path: string | null, size: string): string {
   return `${TMDB_IMAGE_BASE}${size}${path}`;
 }
 
+// Semantic alias — TMDB serves WebP via Accept header negotiation
+export function tmdbImageWebP(path: string | null, size: string): string {
+  return tmdbImage(path, size);
+}
+
+function buildUrl(endpoint: string): string {
+  return `${TMDB_BASE}${endpoint}${endpoint.includes("?") ? "&" : "?"}api_key=${TMDB_API_KEY}`;
+}
+
 async function tmdbFetch<T>(endpoint: string): Promise<T> {
-  const url = `${TMDB_BASE}${endpoint}${endpoint.includes("?") ? "&" : "?"}api_key=${TMDB_API_KEY}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`TMDB error: ${res.status} ${res.statusText}`);
-  return res.json() as Promise<T>;
+  return cachedFetch<T>(buildUrl(endpoint));
 }
 
 export async function fetchTrendingMovies(): Promise<TMDBTrendingResponse> {

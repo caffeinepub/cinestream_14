@@ -1,15 +1,16 @@
-import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "@tanstack/react-router";
 import { Star } from "lucide-react";
-import { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useIsMobile } from "../hooks/useIsMobile";
 import {
   useTMDBWatchlistIds,
   useTMDBWatchlistMutations,
 } from "../hooks/useQueries";
-import { getReleaseYear, tmdbImage } from "../services/tmdb";
+import { tmdbImage } from "../services/tmdb";
 import type { TMDBMovie } from "../types/tmdb";
+import LazyPoster from "./LazyPoster";
 import TrailerModal from "./TrailerModal";
 import TrailerPreviewCard from "./TrailerPreviewCard";
 
@@ -18,12 +19,22 @@ interface TMDBMovieCardProps {
   index: number;
 }
 
-export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
+const TMDBMovieCard = React.memo(function TMDBMovieCard({
+  movie,
+  index,
+}: TMDBMovieCardProps) {
   const navigate = useNavigate();
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgError, setImgError] = useState(false);
+  const isMobile = useIsMobile();
   const [activeTrailerKey, setActiveTrailerKey] = useState<string | null>(null);
-  const posterUrl = tmdbImage(movie.poster_path, "w185");
+
+  const lowSrc = useMemo(
+    () => tmdbImage(movie.poster_path, "w200"),
+    [movie.poster_path],
+  );
+  const highSrc = useMemo(
+    () => tmdbImage(movie.poster_path, isMobile ? "w342" : "w500"),
+    [movie.poster_path, isMobile],
+  );
 
   const { loginStatus, identity } = useInternetIdentity();
   const isLoggedIn = loginStatus === "success" && !!identity;
@@ -31,10 +42,13 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
   const { addToTMDBWatchlist, removeFromTMDBWatchlist } =
     useTMDBWatchlistMutations();
 
-  const isInWatchlist =
-    isLoggedIn && (watchlistIds ?? []).some((id) => id === BigInt(movie.id));
+  const isInWatchlist = useMemo(
+    () =>
+      isLoggedIn && (watchlistIds ?? []).some((id) => id === BigInt(movie.id)),
+    [isLoggedIn, watchlistIds, movie.id],
+  );
 
-  const handleWatchlistToggle = () => {
+  const handleWatchlistToggle = useCallback(() => {
     if (!isLoggedIn) {
       toast.info("Sign in to save to your watchlist");
       return;
@@ -48,15 +62,26 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
         onSuccess: () => toast.success(`Added "${movie.title}" to watchlist`),
       });
     }
-  };
+  }, [
+    isLoggedIn,
+    isInWatchlist,
+    movie.id,
+    movie.title,
+    addToTMDBWatchlist,
+    removeFromTMDBWatchlist,
+  ]);
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     navigate({ to: "/tmdb/$id", params: { id: movie.id.toString() } });
-  };
+  }, [navigate, movie.id]);
 
-  const handleMoreInfo = () => {
+  const handleMoreInfo = useCallback(() => {
     navigate({ to: "/tmdb/$id", params: { id: movie.id.toString() } });
-  };
+  }, [navigate, movie.id]);
+
+  const handlePlay = useCallback((key: string) => {
+    setActiveTrailerKey(key);
+  }, []);
 
   return (
     <>
@@ -64,7 +89,7 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
         movieId={movie.id}
         title={movie.title}
         rating={movie.vote_average}
-        onPlay={(key) => setActiveTrailerKey(key)}
+        onPlay={handlePlay}
         onMoreInfo={handleMoreInfo}
         isInWatchlist={isInWatchlist}
         onWatchlistToggle={handleWatchlistToggle}
@@ -77,24 +102,12 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
           onClick={handleClick}
         >
           <div className="relative overflow-hidden rounded-md bg-secondary aspect-[2/3] card-glow-hover">
-            {!imgLoaded && !imgError && (
-              <Skeleton className="absolute inset-0 skeleton-shimmer bg-transparent" />
-            )}
-
-            {posterUrl && !imgError ? (
-              <img
-                src={posterUrl}
+            {lowSrc ? (
+              <LazyPoster
+                lowSrc={lowSrc}
+                highSrc={highSrc}
                 alt={movie.title}
-                onLoad={() => setImgLoaded(true)}
-                onError={() => {
-                  setImgError(true);
-                  setImgLoaded(true);
-                }}
-                className={`w-full h-full object-cover transition-opacity duration-300 ${
-                  imgLoaded ? "opacity-100" : "opacity-0"
-                }`}
-                loading="lazy"
-                decoding="async"
+                className="absolute inset-0 rounded-md"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-secondary/80 p-4">
@@ -104,7 +117,6 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
               </div>
             )}
 
-            {/* Gradient overlay on poster */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
 
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center">
@@ -132,7 +144,7 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
             </span>
             {movie.release_date && (
               <span className="text-xs text-muted-foreground">
-                {getReleaseYear(movie.release_date)}
+                {movie.release_date.split("-")[0]}
               </span>
             )}
           </div>
@@ -145,4 +157,6 @@ export default function TMDBMovieCard({ movie, index }: TMDBMovieCardProps) {
       />
     </>
   );
-}
+});
+
+export default TMDBMovieCard;

@@ -12,11 +12,11 @@ import Float "mo:core/Float";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Order "mo:core/Order";
-import Migration "migration";
+
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
-(with migration = Migration.run)
+
 actor {
   type ContinueWatchingProgress = {
     movieId : Nat;

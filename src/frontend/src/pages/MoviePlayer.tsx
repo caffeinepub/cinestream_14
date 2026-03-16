@@ -20,6 +20,7 @@ import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import Paywall from "../components/Paywall";
 import { SAMPLE_MOVIES } from "../data/sampleMovies";
+import { useHLS } from "../hooks/useHLS";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAllMovies,
@@ -50,6 +51,7 @@ export default function MoviePlayerPage() {
   } | null>(null);
   const [progressRestored, setProgressRestored] = useState(false);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
@@ -97,6 +99,9 @@ export default function MoviePlayerPage() {
     movieQuery.data ??
     allMovies.find((m) => m.id === movieId) ??
     SAMPLE_MOVIES.find((m) => m.id === movieId);
+
+  // HLS adaptive streaming
+  const { hlsLevel, hlsLevels } = useHLS(videoRef, movie?.videoUrl);
 
   const watchlistIds = watchlistIdsQuery.data ?? [];
   const isInWatchlist = watchlistIds.some((wid) => wid === movieId);
@@ -343,8 +348,8 @@ export default function MoviePlayerPage() {
           />
           {movie.videoUrl ? (
             <video
+              ref={videoRef}
               className="w-full h-full object-contain"
-              src={movie.videoUrl}
               muted={isMuted}
               loop
             />
@@ -453,6 +458,16 @@ export default function MoviePlayerPage() {
                   {formatTime(currentTimeSec)} / {Number(movie.duration)}m
                 </span>
               </div>
+              {/* HLS quality badge */}
+              {hlsLevels.length > 0 && (
+                <span className="text-xs font-bold text-white/70 px-2 py-0.5 bg-white/10 rounded select-none">
+                  {hlsLevel === -1
+                    ? "AUTO"
+                    : hlsLevels[hlsLevel]?.height
+                      ? `${hlsLevels[hlsLevel].height}p`
+                      : "AUTO"}
+                </span>
+              )}
               <Button
                 data-ocid="player.fullscreen_button"
                 size="icon"

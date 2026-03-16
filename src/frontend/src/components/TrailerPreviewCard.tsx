@@ -6,6 +6,9 @@ import { toast } from "sonner";
 const TMDB_API_KEY = "fadb0b01b6573c9e09695a7b0498aa71";
 const OVERLAY_WIDTH = 300;
 
+// Module-level cache to avoid duplicate trailer fetches
+const trailerCache = new Map<number, string | "none">();
+
 interface TrailerPreviewCardProps {
   movieId: number;
   title: string;
@@ -49,6 +52,18 @@ export default function TrailerPreviewCard({
   if (isMobile) return <>{children}</>;
 
   const fetchTrailer = async () => {
+    const cached = trailerCache.get(movieId);
+    if (cached !== undefined) {
+      if (cached === "none") {
+        setTrailerKey(null);
+        setNoTrailer(true);
+      } else {
+        setTrailerKey(cached);
+        setNoTrailer(false);
+      }
+      return;
+    }
+
     try {
       const res = await fetch(
         `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${TMDB_API_KEY}`,
@@ -68,13 +83,16 @@ export default function TrailerPreviewCard({
         videos.find((v) => v.site === "YouTube" && v.type === "Teaser") ??
         null;
       if (trailer) {
+        trailerCache.set(movieId, trailer.key);
         setTrailerKey(trailer.key);
         setNoTrailer(false);
       } else {
+        trailerCache.set(movieId, "none");
         setTrailerKey(null);
         setNoTrailer(true);
       }
     } catch {
+      trailerCache.set(movieId, "none");
       setTrailerKey(null);
       setNoTrailer(true);
     }
@@ -145,273 +163,92 @@ export default function TrailerPreviewCard({
               left: overlayLeft,
               width: OVERLAY_WIDTH,
               zIndex: 9999,
-              borderRadius: "12px",
-              overflow: "hidden",
-              background: "#141414",
-              boxShadow:
-                "0 20px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.08), 0 0 40px rgba(229,9,20,0.1)",
-              animation: "trailerPreviewIn 0.2s ease forwards",
+              animation: "trailerPreviewIn 0.18s ease-out",
             }}
+            className="rounded-xl overflow-hidden shadow-2xl"
           >
-            {/* YouTube Preview */}
             <div
-              style={{
-                position: "relative",
-                paddingBottom: "56.25%",
-                background: "#0a0a0a",
-              }}
+              className="relative bg-black"
+              style={{ width: OVERLAY_WIDTH, height: 168 }}
             >
               {trailerKey ? (
                 <iframe
-                  src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&loop=1&playlist=${trailerKey}`}
-                  title={`${title} Trailer Preview`}
+                  key={trailerKey}
+                  src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&loop=1&playlist=${trailerKey}&rel=0&showinfo=0`}
                   allow="autoplay; encrypted-media"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    border: 0,
-                    display: "block",
-                  }}
+                  allowFullScreen
+                  className="w-full h-full border-0"
+                  title={`${title} trailer`}
                 />
               ) : noTrailer ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "rgba(255,255,255,0.4)",
-                    fontSize: "0.75rem",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  Trailer not available
+                <div className="w-full h-full flex items-center justify-center bg-secondary/60">
+                  <span className="text-xs text-muted-foreground">
+                    No trailer available
+                  </span>
                 </div>
               ) : (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
+                <div className="w-full h-full flex items-center justify-center bg-secondary/60">
                   <div
-                    style={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: "50%",
-                      border: "2px solid rgba(255,255,255,0.2)",
-                      borderTopColor: "#e50914",
-                      animation: "previewSpin 0.8s linear infinite",
-                    }}
+                    className="w-6 h-6 rounded-full border-2 border-white/40 border-t-white"
+                    style={{ animation: "previewSpin 0.7s linear infinite" }}
                   />
                 </div>
               )}
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: "40%",
-                  background:
-                    "linear-gradient(to top, #141414 0%, transparent 100%)",
-                  pointerEvents: "none",
-                }}
-              />
             </div>
 
-            {/* Info section */}
-            <div style={{ padding: "12px 14px 14px" }}>
-              {/* Title + watchlist icon row */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  gap: 8,
-                  marginBottom: 6,
-                }}
-              >
-                <p
-                  style={{
-                    color: "#ffffff",
-                    fontWeight: 700,
-                    fontSize: "0.875rem",
-                    lineHeight: 1.3,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    fontFamily: "inherit",
-                    flex: 1,
-                    minWidth: 0,
-                  }}
-                >
+            <div className="bg-[#1a1a1a] px-3 py-2.5 border-t border-white/5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-white truncate max-w-[160px]">
                   {title}
                 </p>
-                {/* Watchlist toggle button */}
-                <button
-                  type="button"
-                  data-ocid="preview.toggle"
-                  onClick={handleWatchlistClick}
-                  title={
-                    isInWatchlist ? "Remove from watchlist" : "Add to watchlist"
-                  }
-                  style={{
-                    flexShrink: 0,
-                    width: 28,
-                    height: 28,
-                    borderRadius: "50%",
-                    border: isInWatchlist
-                      ? "2px solid #e50914"
-                      : "2px solid rgba(255,255,255,0.35)",
-                    background: isInWatchlist
-                      ? "rgba(229,9,20,0.18)"
-                      : "transparent",
-                    color: isInWatchlist ? "#e50914" : "rgba(255,255,255,0.7)",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    transition: "all 0.15s ease",
-                    padding: 0,
-                  }}
-                >
-                  {isInWatchlist ? (
-                    <Check style={{ width: 13, height: 13 }} />
-                  ) : (
-                    <Plus style={{ width: 13, height: 13 }} />
-                  )}
-                </button>
-              </div>
-
-              {/* Rating */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  marginBottom: 12,
-                }}
-              >
-                <Star
-                  style={{
-                    width: 12,
-                    height: 12,
-                    fill: "#e50914",
-                    color: "#e50914",
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    color: "#e5e5e5",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {rating.toFixed(1)}
+                <span className="flex items-center gap-0.5 text-xs shrink-0">
+                  <Star className="w-3 h-3 fill-[#e50914] text-[#e50914]" />
+                  <span className="font-semibold text-white">
+                    {rating.toFixed(1)}
+                  </span>
                 </span>
               </div>
 
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  data-ocid="preview.primary_button"
+                  data-ocid="trailer_preview.primary_button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (trailerKey) {
-                      onPlay(trailerKey);
-                    } else {
-                      onMoreInfo();
-                    }
-                    handleMouseLeave();
+                    if (trailerKey) onPlay(trailerKey);
                   }}
-                  style={{
-                    flex: 1,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                    padding: "7px 12px",
-                    background: "#e50914",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                    fontWeight: 700,
-                    fontSize: "0.8rem",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    transition: "background 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background =
-                      "#c1000f";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background =
-                      "#e50914";
-                  }}
+                  disabled={!trailerKey}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-white text-black rounded-md py-1.5 text-xs font-semibold hover:bg-white/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Play
-                    style={{
-                      width: 12,
-                      height: 12,
-                      fill: "#fff",
-                      flexShrink: 0,
-                    }}
-                  />
-                  Play
+                  <Play className="w-3 h-3 fill-black" /> Play
                 </button>
 
                 <button
                   type="button"
-                  data-ocid="preview.secondary_button"
+                  data-ocid="trailer_preview.secondary_button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onMoreInfo();
-                    handleMouseLeave();
                   }}
-                  style={{
-                    flex: 1,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                    padding: "7px 12px",
-                    background: "transparent",
-                    color: "#e5e5e5",
-                    border: "1px solid rgba(255,255,255,0.25)",
-                    borderRadius: 6,
-                    fontWeight: 600,
-                    fontSize: "0.8rem",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    transition:
-                      "border-color 0.15s ease, background 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor =
-                      "rgba(255,255,255,0.6)";
-                    (e.currentTarget as HTMLButtonElement).style.background =
-                      "rgba(255,255,255,0.08)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor =
-                      "rgba(255,255,255,0.25)";
-                    (e.currentTarget as HTMLButtonElement).style.background =
-                      "transparent";
-                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-white/10 text-white rounded-md py-1.5 text-xs font-semibold hover:bg-white/20 transition-colors border border-white/20"
                 >
-                  <Info style={{ width: 12, height: 12, flexShrink: 0 }} />
-                  More Info
+                  <Info className="w-3 h-3" /> More Info
+                </button>
+
+                <button
+                  type="button"
+                  data-ocid="trailer_preview.toggle"
+                  onClick={handleWatchlistClick}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 border border-white/20 hover:bg-white/20 transition-colors shrink-0"
+                  title={
+                    isInWatchlist ? "Remove from watchlist" : "Add to watchlist"
+                  }
+                >
+                  {isInWatchlist ? (
+                    <Check className="w-4 h-4 text-[#e50914]" />
+                  ) : (
+                    <Plus className="w-4 h-4 text-white" />
+                  )}
                 </button>
               </div>
             </div>

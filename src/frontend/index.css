@@ -233,3 +233,36 @@
     to { transform: rotate(360deg); }
   }
 }
+
+@layer utilities {
+  /* GPU accelerated scroll containers */
+  .scroll-gpu {
+    transform: translateZ(0);
+    will-change: transform;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Reduce animations on mobile/touch devices */
+  @media (hover: none) {
+    .card-glow-hover {
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    [class*="animate-"] {
+      animation-duration: 0s !important;
+    }
+    .transition-transform {
+      transition: none !important;
+    }
+  }
+
+  /* Respect user preference for reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

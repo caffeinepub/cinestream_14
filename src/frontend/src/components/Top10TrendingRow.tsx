@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Star } from "lucide-react";
+import { AlertCircle, RefreshCw, Star } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -9,12 +9,15 @@ import {
   useTMDBWatchlistIds,
   useTMDBWatchlistMutations,
 } from "../hooks/useQueries";
+import { TMDB_API_KEY, tmdbImage } from "../services/tmdb";
+import { cachedFetch } from "../services/tmdbCache";
+import { DEBUG_PLACEHOLDER_MOVIES } from "../services/tmdbDebugMovies";
 import type { TMDBMovie } from "../types/tmdb";
+import LazyPoster from "./LazyPoster";
 import SectionHeader from "./SectionHeader";
 import TrailerModal from "./TrailerModal";
 import TrailerPreviewCard from "./TrailerPreviewCard";
 
-const TMDB_API_KEY = "fadb0b01b6573c9e09695a7b0498aa71";
 const SKELETON_KEYS = [
   "s1",
   "s2",
@@ -38,14 +41,17 @@ function useTop10Trending() {
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb-top10-trending"],
     queryFn: async () => {
-      const res = await fetch(
-        `https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_API_KEY}`,
+      const url = `https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_API_KEY}`;
+      console.log("[TMDB] Request started: Top10 trending/week");
+      const data = await cachedFetch<{ results: TMDBMovie[] }>(url);
+      console.log(
+        `[TMDB] State updated: Top10 — ${data.results.length} movies, using top 10`,
       );
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      return (data.results as TMDBMovie[]).slice(0, 10);
+      return data.results.slice(0, 10);
     },
     staleTime: 1000 * 60 * 10,
+    retry: 2,
+    placeholderData: DEBUG_PLACEHOLDER_MOVIES.slice(0, 5),
   });
 }
 
@@ -81,10 +87,8 @@ function Top10Card({
   const [hovered, setHovered] = useState(false);
   const [activeTrailerKey, setActiveTrailerKey] = useState<string | null>(null);
 
-  const posterUrl = movie.poster_path
-    ? `https://image.tmdb.org/t/p/w300${movie.poster_path}`
-    : null;
-
+  const lowSrc = tmdbImage(movie.poster_path, "w200");
+  const highSrc = tmdbImage(movie.poster_path, "w342");
   const rating = movie.vote_average ? movie.vote_average.toFixed(1) : "N/A";
 
   const handleMoreInfo = () => {
@@ -103,7 +107,6 @@ function Top10Card({
         onWatchlistToggle={onWatchlistToggle}
         isLoggedIn={isLoggedIn}
       >
-        {/* Flutter: Padding(padding: EdgeInsets.only(right: 12), child: Top10Card(...)) */}
         <button
           type="button"
           className="flex-shrink-0 cursor-pointer bg-transparent border-0 p-0 text-left"
@@ -114,7 +117,6 @@ function Top10Card({
           onClick={handleMoreInfo}
           aria-label={`${rank}. ${movie.title}`}
         >
-          {/* Flutter: AnimatedScale + Stack */}
           <div
             className="relative overflow-hidden rounded-xl"
             style={{
@@ -127,17 +129,13 @@ function Top10Card({
                 : "0 3px 8px rgba(0,0,0,0.6)",
             }}
           >
-            {posterUrl ? (
-              <img
-                src={posterUrl}
+            {lowSrc ? (
+              <LazyPoster
+                lowSrc={lowSrc}
+                highSrc={highSrc}
                 alt={movie.title}
-                loading="lazy"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
+                className="absolute inset-0 rounded-xl"
+                style={{ width: CARD_W, height: CARD_H }}
               />
             ) : (
               <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/30 text-xs text-center p-2">
@@ -234,7 +232,7 @@ function Top10Card({
 }
 
 export default function Top10TrendingRow() {
-  const { data: movies, isLoading, isError } = useTop10Trending();
+  const { data: movies, isLoading, isError, refetch } = useTop10Trending();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { loginStatus, identity } = useInternetIdentity();
@@ -262,18 +260,31 @@ export default function Top10TrendingRow() {
     }
   };
 
-  // Flutter: SizedBox(height: 210, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: 10, ...))
   return (
     <section className="mb-10" data-ocid="top10_row.section">
       <SectionHeader title="Top 10 Trending Today" label="TOP 10" />
 
       {isError && (
-        <p
-          className="px-4 sm:px-8 text-sm text-red-500 mb-4"
+        <div
+          className="mx-4 sm:mx-8 mb-4 flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3"
           data-ocid="top10_row.error_state"
         >
-          Unable to load Top 10. Please try again later.
-        </p>
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-red-300 font-medium">
+              Failed to load movies. Please refresh or try again later.
+            </p>
+          </div>
+          <button
+            type="button"
+            data-ocid="top10_row.retry_button"
+            onClick={() => refetch()}
+            className="flex items-center gap-1.5 flex-shrink-0 rounded-md bg-white/10 hover:bg-white/20 px-3 py-1 text-xs text-white transition-colors"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        </div>
       )}
 
       {!isError && (
@@ -284,6 +295,8 @@ export default function Top10TrendingRow() {
             height: ROW_H,
             WebkitOverflowScrolling: "touch",
             overflowY: "visible",
+            transform: "translateZ(0)",
+            willChange: "transform",
           }}
         >
           <div
@@ -298,10 +311,9 @@ export default function Top10TrendingRow() {
                     movie={movie}
                     rank={i + 1}
                     index={i + 1}
-                    isInWatchlist={
-                      isLoggedIn &&
-                      (watchlistIds ?? []).some((id) => id === BigInt(movie.id))
-                    }
+                    isInWatchlist={(watchlistIds ?? []).some(
+                      (id) => id === BigInt(movie.id),
+                    )}
                     onWatchlistToggle={() =>
                       handleWatchlistToggle(movie.id, movie.title)
                     }

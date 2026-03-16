@@ -8,12 +8,61 @@ import { TMDBMovieRowUI } from "./TMDBMovieRow";
 
 type Category = "popular" | "top_rated" | "upcoming" | "now_playing";
 
-const CATEGORY_LABELS: Record<Category, string> = {
-  popular: "POPULAR",
-  top_rated: "TOP RATED",
-  upcoming: "UPCOMING",
-  now_playing: "NEW",
-};
+function PopularRow({ title }: { title: string }) {
+  const { data, isLoading, isError, refetch } = useTMDBPopular();
+  return (
+    <TMDBMovieRowUI
+      title={title}
+      label="POPULAR"
+      movies={data}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={() => refetch()}
+    />
+  );
+}
+
+function TopRatedRow({ title }: { title: string }) {
+  const { data, isLoading, isError, refetch } = useTMDBTopRated();
+  return (
+    <TMDBMovieRowUI
+      title={title}
+      label="TOP RATED"
+      movies={data}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={() => refetch()}
+    />
+  );
+}
+
+function UpcomingRow({ title }: { title: string }) {
+  const { data, isLoading, isError, refetch } = useTMDBUpcoming();
+  return (
+    <TMDBMovieRowUI
+      title={title}
+      label="UPCOMING"
+      movies={data}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={() => refetch()}
+    />
+  );
+}
+
+function NowPlayingRow({ title }: { title: string }) {
+  const { data, isLoading, isError, refetch } = useTMDBNowPlaying();
+  return (
+    <TMDBMovieRowUI
+      title={title}
+      label="NEW"
+      movies={data}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={() => refetch()}
+    />
+  );
+}
 
 interface TMDBCategoryRowProps {
   title: string;
@@ -24,27 +73,8 @@ export default function TMDBCategoryRow({
   title,
   category,
 }: TMDBCategoryRowProps) {
-  const popular = useTMDBPopular();
-  const topRated = useTMDBTopRated();
-  const upcoming = useTMDBUpcoming();
-  const nowPlaying = useTMDBNowPlaying();
-
-  const queryMap = {
-    popular,
-    top_rated: topRated,
-    upcoming,
-    now_playing: nowPlaying,
-  };
-
-  const { data, isLoading, isError } = queryMap[category];
-
-  return (
-    <TMDBMovieRowUI
-      title={title}
-      label={CATEGORY_LABELS[category]}
-      movies={data}
-      isLoading={isLoading}
-      isError={isError}
-    />
-  );
+  if (category === "popular") return <PopularRow title={title} />;
+  if (category === "top_rated") return <TopRatedRow title={title} />;
+  if (category === "upcoming") return <UpcomingRow title={title} />;
+  return <NowPlayingRow title={title} />;
 }

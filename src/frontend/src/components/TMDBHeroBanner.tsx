@@ -1,9 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "@tanstack/react-router";
 import { Clock, Info, Play, Star, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { cachedFetch } from "../services/tmdbCache";
 
 const API_KEY = "fadb0b01b6573c9e09695a7b0498aa71";
 
@@ -31,19 +33,19 @@ export default function TMDBHeroBanner() {
   useEffect(() => {
     async function fetchMovies() {
       try {
-        const res = await fetch(
-          `https://api.themoviedb.org/3/trending/movie/week?api_key=${API_KEY}`,
+        const trendingUrl = `https://api.themoviedb.org/3/trending/movie/week?api_key=${API_KEY}`;
+        const data = await cachedFetch<{ results: { id: number }[] }>(
+          trendingUrl,
         );
-        const data = await res.json();
-        const top5 = (data.results as { id: number }[]).slice(0, 5);
+        const top5 = data.results.slice(0, 5);
         const detailed = await Promise.all(
           top5.map((m) =>
-            fetch(
+            cachedFetch<TMDBMovie>(
               `https://api.themoviedb.org/3/movie/${m.id}?api_key=${API_KEY}`,
-            ).then((r) => r.json()),
+            ),
           ),
         );
-        setMovies(detailed as TMDBMovie[]);
+        setMovies(detailed);
       } catch {
         // silently fail
       } finally {
@@ -103,13 +105,14 @@ export default function TMDBHeroBanner() {
     if (!movies[active]) return;
     setTrailerLoading(true);
     try {
-      const res = await fetch(
+      const data = await cachedFetch<{
+        results: { site: string; type: string; key: string }[];
+      }>(
         `https://api.themoviedb.org/3/movie/${movies[active].id}/videos?api_key=${API_KEY}`,
       );
-      const data = await res.json();
-      const trailer = (
-        data.results as { site: string; type: string; key: string }[]
-      ).find((v) => v.site === "YouTube" && v.type === "Trailer");
+      const trailer = data.results.find(
+        (v) => v.site === "YouTube" && v.type === "Trailer",
+      );
       if (trailer) {
         setTrailerUrl(
           `https://www.youtube-nocookie.com/embed/${trailer.key}?autoplay=1&rel=0`,
@@ -130,9 +133,19 @@ export default function TMDBHeroBanner() {
     return (
       <div
         data-ocid="tmdb_hero.loading_state"
-        className="relative w-full min-h-[85vh] bg-zinc-900 animate-pulse"
+        className="relative w-full min-h-[85vh] overflow-hidden"
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-zinc-900 via-zinc-800/50 to-transparent" />
+        <Skeleton className="absolute inset-0 skeleton-shimmer bg-white/10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
+        <div className="absolute bottom-24 left-8 space-y-4">
+          <Skeleton className="h-12 w-72 skeleton-shimmer bg-white/10 rounded" />
+          <Skeleton className="h-5 w-96 skeleton-shimmer bg-white/10 rounded" />
+          <Skeleton className="h-5 w-80 skeleton-shimmer bg-white/10 rounded" />
+          <div className="flex gap-3 pt-4">
+            <Skeleton className="h-12 w-36 skeleton-shimmer bg-white/10 rounded" />
+            <Skeleton className="h-12 w-36 skeleton-shimmer bg-white/10 rounded" />
+          </div>
+        </div>
       </div>
     );
   }

@@ -15,7 +15,7 @@ interface TMDBGenreRowProps {
 }
 
 export default function TMDBGenreRow({ title, genreId }: TMDBGenreRowProps) {
-  const { data, isLoading, isError } = useTMDBByGenre(genreId);
+  const { data, isLoading, isError, refetch } = useTMDBByGenre(genreId);
   return (
     <TMDBMovieRowUI
       title={title}
@@ -23,6 +23,7 @@ export default function TMDBGenreRow({ title, genreId }: TMDBGenreRowProps) {
       movies={data}
       isLoading={isLoading}
       isError={isError}
+      onRetry={() => refetch()}
     />
   );
 }

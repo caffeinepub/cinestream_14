@@ -2,7 +2,7 @@ import { useTMDBTrending } from "../hooks/useTMDB";
 import { TMDBMovieRowUI } from "./TMDBMovieRow";
 
 export default function TMDBTrendingRow() {
-  const { data, isLoading, isError } = useTMDBTrending();
+  const { data, isLoading, isError, refetch } = useTMDBTrending();
   return (
     <TMDBMovieRowUI
       title="Trending Now"
@@ -10,6 +10,7 @@ export default function TMDBTrendingRow() {
       movies={data}
       isLoading={isLoading}
       isError={isError}
+      onRetry={() => refetch()}
     />
   );
 }
