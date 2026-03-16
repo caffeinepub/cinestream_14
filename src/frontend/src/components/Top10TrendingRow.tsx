@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { useIsMobile } from "../hooks/use-mobile";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useTMDBWatchlistIds,
@@ -32,19 +33,52 @@ function useTop10Trending() {
   });
 }
 
-function SkeletonTop10Card() {
+// Responsive sizing constants
+// Desktop: card=200px, poster=130px, numW=90px, cardH=260px, posterH=195px
+// Mobile:  card=140px, poster=92px,  numW=64px, cardH=184px, posterH=138px
+const SIZES = {
+  desktop: {
+    cardW: 200,
+    cardH: 260,
+    posterW: 130,
+    posterH: 195,
+    numW: 90,
+    numFontLarge: "8.5rem",
+    numFont10: "6.5rem",
+    numStroke: "3px",
+    posterOffset: 20, // how many px the number bleeds behind poster
+  },
+  mobile: {
+    cardW: 140,
+    cardH: 184,
+    posterW: 92,
+    posterH: 138,
+    numW: 64,
+    numFontLarge: "5.2rem",
+    numFont10: "4rem",
+    numStroke: "2px",
+    posterOffset: 16,
+  },
+};
+
+function SkeletonTop10Card({ isMobile }: { isMobile: boolean }) {
+  const s = isMobile ? SIZES.mobile : SIZES.desktop;
   return (
-    <div className="flex-shrink-0" style={{ width: "180px" }}>
-      <div className="flex items-end" style={{ height: "240px" }}>
+    <div className="flex-shrink-0" style={{ width: s.cardW }}>
+      <div className="flex items-end" style={{ height: s.cardH }}>
         <div
           className="flex-shrink-0"
-          style={{ width: "80px", height: "120px" }}
+          style={{ width: s.numW, height: s.numW * 1.5 }}
         >
           <Skeleton className="w-full h-full rounded skeleton-shimmer bg-white/10" />
         </div>
         <Skeleton
           className="flex-shrink-0 rounded-md skeleton-shimmer bg-white/10"
-          style={{ width: "120px", height: "180px", marginLeft: "-20px" }}
+          style={{
+            width: s.posterW,
+            height: s.posterH,
+            marginLeft: -s.posterOffset,
+          }}
         />
       </div>
     </div>
@@ -58,6 +92,7 @@ interface Top10CardProps {
   isInWatchlist: boolean;
   onWatchlistToggle: () => void;
   isLoggedIn: boolean;
+  isMobile: boolean;
 }
 
 function Top10Card({
@@ -67,10 +102,12 @@ function Top10Card({
   isInWatchlist,
   onWatchlistToggle,
   isLoggedIn,
+  isMobile,
 }: Top10CardProps) {
   const navigate = useNavigate();
   const [hovered, setHovered] = useState(false);
   const [activeTrailerKey, setActiveTrailerKey] = useState<string | null>(null);
+  const s = isMobile ? SIZES.mobile : SIZES.desktop;
 
   const posterUrl = movie.poster_path
     ? `https://image.tmdb.org/t/p/w300${movie.poster_path}`
@@ -88,6 +125,9 @@ function Top10Card({
 
   const posterTransform = hovered ? "scale(1.07) translateY(-4px)" : "scale(1)";
 
+  // Number font size based on rank digits and screen
+  const numFontSize = rank >= 10 ? s.numFont10 : s.numFontLarge;
+
   return (
     <>
       <TrailerPreviewCard
@@ -103,43 +143,68 @@ function Top10Card({
         <button
           type="button"
           className="flex-shrink-0 cursor-pointer bg-transparent border-0 p-0 text-left"
-          style={{ width: "180px" }}
+          style={{ width: s.cardW }}
           data-ocid={`top10_row.item.${index}`}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onClick={handleMoreInfo}
           aria-label={`${rank}. ${movie.title}`}
         >
-          <div className="relative flex items-end" style={{ height: "240px" }}>
-            {/* Large rank number behind poster */}
+          {/*
+           * Layout: fixed-height container.
+           * Number sits at bottom-left (zIndex 1).
+           * Poster sits at bottom-right, overlapping number by posterOffset px (zIndex 2).
+           * This ensures the number is always partially visible to the left of the poster.
+           */}
+          <div
+            className="relative"
+            style={{
+              height: s.cardH,
+              // Extra left padding so the number is never clipped by the scroll container
+              paddingLeft: 0,
+            }}
+          >
+            {/* Large rank number — sits behind the poster */}
             <div
-              className="absolute left-0 bottom-0 select-none flex items-end"
-              style={{ zIndex: 1, width: "80px", height: "220px" }}
+              className="absolute left-0 bottom-0 flex items-end justify-start"
+              style={{
+                zIndex: 1,
+                width: s.numW,
+                // Vertically align bottom of number with bottom of poster
+                height: s.posterH + 8,
+                paddingBottom: 2,
+              }}
             >
               <span
                 style={{
                   fontFamily:
                     "'BricolageGrotesque', 'Playfair Display', Georgia, serif",
-                  fontSize: rank >= 10 ? "7rem" : "9rem",
+                  fontSize: numFontSize,
                   fontWeight: 900,
                   lineHeight: 1,
                   color: "transparent",
-                  WebkitTextStroke: "3px rgba(255,255,255,0.55)",
-                  textShadow: "0 0 30px rgba(255,255,255,0.08)",
-                  letterSpacing: "-0.05em",
+                  // Bold stroke outline for readability on dark backgrounds
+                  WebkitTextStroke: `${s.numStroke} rgba(255,255,255,0.7)`,
+                  // Subtle red-tinted glow so the number reads against any poster edge
+                  textShadow:
+                    "0 0 18px rgba(229,9,20,0.35), 0 0 40px rgba(0,0,0,0.9)",
+                  letterSpacing: "-0.04em",
                   userSelect: "none",
+                  display: "block",
                 }}
               >
                 {rank}
               </span>
             </div>
 
-            {/* Poster overlapping the number */}
+            {/* Poster — positioned to leave the number visible on the left */}
             <div
-              className="absolute right-0 bottom-0 overflow-hidden rounded-md"
+              className="absolute bottom-0 overflow-hidden rounded-md"
               style={{
-                width: "120px",
-                height: "180px",
+                // Start after (numW - posterOffset) so number peeks out on left
+                left: s.numW - s.posterOffset,
+                width: s.posterW,
+                height: s.posterH,
                 zIndex: 2,
                 transition: "transform 0.3s ease, box-shadow 0.3s ease",
                 transform: posterTransform,
@@ -225,6 +290,7 @@ function Top10Card({
 export default function Top10TrendingRow() {
   const { data: movies, isLoading, isError } = useTop10Trending();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile(768);
 
   const { loginStatus, identity } = useInternetIdentity();
   const isLoggedIn = loginStatus === "success" && !!identity;
@@ -260,6 +326,10 @@ export default function Top10TrendingRow() {
     });
   };
 
+  // Gap between cards: enough so each card's number doesn't creep behind neighbor's poster
+  // Desktop: 16px, Mobile: 10px
+  const cardGap = isMobile ? 10 : 16;
+
   return (
     <section className="mb-10 group/top10row" data-ocid="top10_row.section">
       <SectionHeader title="Top 10 Trending Today" label="TOP 10" />
@@ -288,11 +358,17 @@ export default function Top10TrendingRow() {
 
           <div
             ref={scrollRef}
-            className="flex gap-2 overflow-x-auto scrollbar-hide px-4 sm:px-8 pb-4"
-            style={{ overflowY: "visible", WebkitOverflowScrolling: "touch" }}
+            className="flex overflow-x-auto scrollbar-hide px-4 sm:px-8 pb-4"
+            style={{
+              gap: cardGap,
+              overflowY: "visible",
+              WebkitOverflowScrolling: "touch",
+            }}
           >
             {isLoading
-              ? SKELETON_KEYS.map((k) => <SkeletonTop10Card key={k} />)
+              ? SKELETON_KEYS.map((k) => (
+                  <SkeletonTop10Card key={k} isMobile={isMobile} />
+                ))
               : (movies ?? []).map((movie, i) => (
                   <Top10Card
                     key={movie.id}
@@ -307,6 +383,7 @@ export default function Top10TrendingRow() {
                       handleWatchlistToggle(movie.id, movie.title)
                     }
                     isLoggedIn={isLoggedIn}
+                    isMobile={isMobile}
                   />
                 ))}
           </div>
