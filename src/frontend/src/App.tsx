@@ -14,6 +14,8 @@ import AdminPage from "./pages/Admin";
 import HomePage from "./pages/Home";
 import MoviePlayerPage from "./pages/MoviePlayer";
 import SearchPage from "./pages/Search";
+import SubscriptionPage from "./pages/Subscription";
+import SubscriptionSuccessPage from "./pages/SubscriptionSuccess";
 import TMDBMovieDetailPage from "./pages/TMDBMovieDetail";
 import WatchlistPage from "./pages/Watchlist";
 
@@ -95,6 +97,16 @@ const tmdbMovieRoute = createRoute({
   path: "/tmdb/$id",
   component: TMDBMovieDetailPage,
 });
+const subscriptionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/subscription",
+  component: SubscriptionPage,
+});
+const subscriptionSuccessRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/subscription/success",
+  component: SubscriptionSuccessPage,
+});
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
@@ -103,6 +115,8 @@ const routeTree = rootRoute.addChildren([
   watchlistRoute,
   adminRoute,
   tmdbMovieRoute,
+  subscriptionRoute,
+  subscriptionSuccessRoute,
 ]);
 const router = createRouter({ routeTree });
 

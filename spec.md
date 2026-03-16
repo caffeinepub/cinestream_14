@@ -1,46 +1,47 @@
 # CineStream
 
 ## Current State
-CineStream is a full-stack Netflix-style OTT platform built on ICP. The backend (Motoko) manages admin movies, user watchlists (both admin and TMDB), and a Continue Watching system with progress tracking per Internet Identity user. The frontend uses React/Tailwind and features: TMDBHeroBanner (auto-rotating top 5 trending), Top10TrendingRow (Netflix-style ranked cards), TMDBTrendingRow, TMDBCategoryRow, TMDBGenreRow, and a MovieRow for admin movies. TMDBMovieCard has a TrailerPreviewCard hover system (1s delay, floating overlay with Play + More Info buttons). MovieCard is for admin movies and accepts `progress` for the Continue Watching bar.
+
+CineStream is a full-stack ICP app (Motoko backend + React/TypeScript frontend) providing a Netflix-style movie streaming experience. The backend manages admin-uploaded movies, per-user watchlists (admin + TMDB), continue watching progress, user profiles (name only), genre interaction scores, and role-based access control. The frontend has a cinematic dark UI with TMDB integration across all rows, a hero banner, Top 10 Trending row, trailer previews on hover, My Watchlist row, Recommended For You row, Continue Watching row, a live search navbar, and an admin content management dashboard.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Backend: `genreInteractions` store per user — records TMDB genre IDs with accumulated weighted score (watched admin movie = 3pts, opened TMDB detail page = 1pt)
-- Backend: `recordGenreInteraction(genreIds: [Nat], weight: Nat)` — adds weighted score to each genre for the caller
-- Backend: `getTopGenres()` — returns top genre IDs sorted by score for the caller
-- Frontend: `RecommendedRow` component — fetches top genres from backend, queries TMDB `/discover/movie` filtered by genre, shows ~20 cards; falls back to trending if no history; hidden when logged out
-- Frontend: `MyWatchlistRow` component — fetches TMDB watchlist IDs, renders TMDB movie cards in a row; hidden when logged out or empty
-- Frontend: "Add to Watchlist" `+` button inside TrailerPreviewCard hover overlay; calls addToTMDBWatchlist/removeFromTMDBWatchlist
-- Frontend: Section header style upgrade across all rows — OTT-style typography with subtle red glow, uppercase category label, and "See All" link
-- Frontend: Cinematic hover effects on all movie cards — lift + red glow box-shadow, scale-up animation
-- Frontend: Remaining time display on Continue Watching cards on hover
-- Frontend: Smooth momentum horizontal scrolling on all row containers
+- `isPremium: Bool` field to Movie and MovieInput backend types
+- `avatarUrl: Text` field to UserProfile backend type
+- Subscription store per user: `{ plan: Text; paymentId: Text; startDate: Int; expiryDate: Int }` with get/save/cancel methods
+- `reorderWatchlist([Nat])` and `reorderTMDBWatchlist([Nat])` backend methods to support watchlist drag reordering
+- Stripe payment component integration for subscription checkout
+- `/subscription` frontend route with cinematic OTT plan card UI (Basic ₹99, Standard ₹199, Premium ₹299), "Most Popular" highlight on Premium
+- Premium badge (gold/red gradient) on top-right corner of admin movie cards that have `isPremium=true`
+- Locked content preview: when non-subscribed user clicks a premium admin movie, show blurred poster + "Subscribe to watch this movie" message + "Upgrade Plan" button linking to `/subscription`
+- User profile dropdown in navbar: display name, subscription plan + expiry, Manage Subscription button, Logout button
+- `isPremium` toggle switch in admin Add/Edit movie dialog
+- Profile edit modal: display name + avatar URL fields
+- Watchlist page enhancements: remove button (already exists for TMDB, add for admin movies displayed in grid), drag-to-reorder via up/down buttons
 
 ### Modify
-- TMDBMovieDetail page: call `recordGenreInteraction` with movie's genre IDs (weight 1) when the page loads
-- MoviePlayer page: call `recordGenreInteraction` with movie's genre (mapped to TMDB genre ID) when progress saves (weight 3)
-- TrailerPreviewCard: add `+` / checkmark watchlist button to hover overlay
-- MovieCard: show remaining time text on hover over progress bar
-- TMDBMovieRow / MovieRow: smooth scrolling with CSS scroll-behavior and momentum (webkit-overflow-scrolling)
-- All row section headers: apply new glowing OTT header style
-- Home.tsx: add RecommendedRow and MyWatchlistRow in correct order: Hero → Top10 → ContinueWatching → RecommendedRow → MyWatchlistRow → Trending → rest
+- `UserProfile` backend type: add `avatarUrl: Text` field
+- Movie/MovieInput backend: add `isPremium: Bool` field
+- Navbar dropdown: replace minimal dropdown with rich profile card showing name, plan, expiry, manage subscription link, logout
+- Admin page: add `isPremium` switch in movie form alongside `isFeatured`
+- MovieCard component: add gold/red gradient "PREMIUM" badge at top-right when `movie.isPremium` is true
+- MoviePlayer page: check subscription status before allowing playback of premium admin movies; show paywall UI if not subscribed
+- Watchlist page: enhance reorder capability with up/down controls
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Update `main.mo` to add genre interaction store + two new API methods
-2. Regenerate `backend.d.ts` types
-3. Update `useQueries.ts` to add `useRecordGenreInteraction`, `useTopGenres` hooks
-4. Create `RecommendedRow.tsx` using top genres → TMDB discover endpoint
-5. Create `MyWatchlistRow.tsx` using TMDB watchlist IDs
-6. Update `TrailerPreviewCard.tsx` to accept watchlist props and show +/check button
-7. Update `TMDBMovieCard.tsx` to pass watchlist props down
-8. Update `MovieCard.tsx` to show remaining time on hover
-9. Create shared `SectionHeader.tsx` with OTT glow style
-10. Apply new header to `TMDBMovieRow.tsx`, `MovieRow.tsx`, `Top10TrendingRow.tsx`
-11. Add CSS hover lift+glow effect to all card containers
-12. Update `TMDBMovieDetail.tsx` to call `recordGenreInteraction` on load
-13. Update `Home.tsx` row order with new rows
-14. Apply smooth momentum scrolling to all scroll containers
+
+1. **Backend (Motoko)**: Add `isPremium` to Movie/MovieInput, add `avatarUrl` to UserProfile, add subscription store with `saveSubscription`, `getSubscription`, `cancelSubscription` methods, add `reorderWatchlist` and `reorderTMDBWatchlist` methods.
+2. **Select Stripe component** before backend generation.
+3. **Frontend - SubscriptionPage**: New `/subscription` route with cinematic plan cards (Basic, Standard, Premium). Stripe checkout integration. "Most Popular" badge on Premium card.
+4. **Frontend - Navbar**: Upgrade user dropdown to show avatar, display name, plan badge, expiry date, "Manage Subscription" button, and Logout.
+5. **Frontend - MovieCard**: Add `isPremium` prop; render gold gradient "PREMIUM" badge at top-right corner when true.
+6. **Frontend - TMDBMovieCard / TMDBMovieRow**: No premium badges (TMDB movies are always free).
+7. **Frontend - MoviePlayer**: On mount, if movie has `isPremium=true`, check subscription; if not active → render Paywall component (blurred poster, message, Upgrade Plan button).
+8. **Frontend - Paywall component**: Blurred poster bg, centered card with lock icon, "Subscribe to watch this movie", "Upgrade Plan" button → `/subscription`.
+9. **Frontend - Admin page**: Add `isPremium` Switch to movie form.
+10. **Frontend - Watchlist page**: Add reorder (up/down arrows) and ensure remove buttons are visible for all items.
+11. **Frontend - Profile modal**: Allow users to set display name and avatar URL, saved to backend.

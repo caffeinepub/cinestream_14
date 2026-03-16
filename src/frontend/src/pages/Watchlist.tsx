@@ -1,18 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bookmark, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Bookmark, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Movie } from "../backend";
 import AuthModal from "../components/AuthModal";
 import Footer from "../components/Footer";
-import MovieCard from "../components/MovieCard";
 import Navbar from "../components/Navbar";
-import TMDBMovieCard from "../components/TMDBMovieCard";
 import { SAMPLE_MOVIES } from "../data/sampleMovies";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAllMovies,
+  useReorderTMDBWatchlist,
+  useReorderWatchlist,
   useTMDBWatchlistIds,
   useTMDBWatchlistMutations,
   useWatchlistIds,
@@ -20,16 +20,23 @@ import {
 } from "../hooks/useQueries";
 import { useTMDBMovieDetail } from "../hooks/useTMDB";
 import { tmdbImage } from "../services/tmdb";
-import type { TMDBMovie } from "../types/tmdb";
 
 const SKELETON_KEYS = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5", "sk-6", "sk-7"];
 
 function TMDBWatchlistItem({
   tmdbId,
+  index,
+  total,
   onRemove,
+  onMoveUp,
+  onMoveDown,
 }: {
   tmdbId: number;
+  index: number;
+  total: number;
   onRemove: (id: number) => void;
+  onMoveUp: (index: number) => void;
+  onMoveDown: (index: number) => void;
 }) {
   const navigate = useNavigate();
   const { data: movie, isLoading } = useTMDBMovieDetail(tmdbId);
@@ -79,15 +86,144 @@ function TMDBWatchlistItem({
           </p>
         )}
       </button>
+
+      {/* Always-visible action buttons */}
+      <div className="absolute top-2 right-2 flex flex-col gap-1">
+        <button
+          type="button"
+          data-ocid={`watchlist.delete_button.${index + 1}`}
+          onClick={() => onRemove(tmdbId)}
+          className="w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-[#e50914] transition-colors"
+          title="Remove"
+        >
+          <X className="w-3 h-3 text-white" />
+        </button>
+      </div>
+
+      {/* Reorder buttons - visible on hover */}
+      <div className="absolute top-2 left-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {index > 0 && (
+          <button
+            type="button"
+            data-ocid={`watchlist.reorder_up_button.${index + 1}`}
+            onClick={() => onMoveUp(index)}
+            className="w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-white/20 transition-colors"
+            title="Move up"
+          >
+            <ArrowUp className="w-3 h-3 text-white" />
+          </button>
+        )}
+        {index < total - 1 && (
+          <button
+            type="button"
+            data-ocid={`watchlist.reorder_down_button.${index + 1}`}
+            onClick={() => onMoveDown(index)}
+            className="w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-white/20 transition-colors"
+            title="Move down"
+          >
+            <ArrowDown className="w-3 h-3 text-white" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminMovieCard({
+  movie,
+  index,
+  total,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: {
+  movie: Movie;
+  index: number;
+  total: number;
+  onRemove: (movie: Movie) => void;
+  onMoveUp: (index: number) => void;
+  onMoveDown: (index: number) => void;
+}) {
+  const navigate = useNavigate();
+  const thumbnailUrl =
+    movie.thumbnailUrl || `https://picsum.photos/seed/${movie.id}/300/450`;
+
+  return (
+    <div className="relative group">
       <button
         type="button"
-        data-ocid="watchlist.delete_button"
-        onClick={() => onRemove(tmdbId)}
-        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#e50914] z-10"
-        title="Remove from watchlist"
+        onClick={() =>
+          navigate({ to: "/movie/$id", params: { id: movie.id.toString() } })
+        }
+        className="w-full text-left"
       >
-        <X className="w-3 h-3 text-white" />
+        <div className="aspect-[2/3] rounded-md overflow-hidden bg-secondary">
+          <img
+            src={thumbnailUrl}
+            alt={movie.title}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+          />
+          {movie.isPremium && (
+            <div className="absolute top-2 right-8">
+              <span
+                className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded text-white shadow-lg"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #FFD700 0%, #FF6B00 100%)",
+                }}
+              >
+                PREMIUM
+              </span>
+            </div>
+          )}
+        </div>
+        <p className="mt-1.5 text-xs font-medium truncate">{movie.title}</p>
+        {movie.rating > 0 && (
+          <p className="text-xs text-muted-foreground">
+            ★ {movie.rating.toFixed(1)}
+          </p>
+        )}
       </button>
+
+      {/* Always-visible remove button */}
+      <div className="absolute top-2 right-2 flex flex-col gap-1">
+        <button
+          type="button"
+          data-ocid={`watchlist.delete_button.${index + 1}`}
+          onClick={() => onRemove(movie)}
+          className="w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-[#e50914] transition-colors"
+          title="Remove"
+        >
+          <X className="w-3 h-3 text-white" />
+        </button>
+      </div>
+
+      {/* Reorder buttons */}
+      <div className="absolute top-2 left-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {index > 0 && (
+          <button
+            type="button"
+            data-ocid={`watchlist.reorder_up_button.${index + 1}`}
+            onClick={() => onMoveUp(index)}
+            className="w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-white/20 transition-colors"
+            title="Move up"
+          >
+            <ArrowUp className="w-3 h-3 text-white" />
+          </button>
+        )}
+        {index < total - 1 && (
+          <button
+            type="button"
+            data-ocid={`watchlist.reorder_down_button.${index + 1}`}
+            onClick={() => onMoveDown(index)}
+            className="w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-white/20 transition-colors"
+            title="Move down"
+          >
+            <ArrowDown className="w-3 h-3 text-white" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -99,36 +235,38 @@ export default function WatchlistPage() {
 
   const allMoviesQuery = useAllMovies();
   const watchlistIdsQuery = useWatchlistIds();
-  const { addToWatchlist, removeFromWatchlist } = useWatchlistMutations();
+  const { removeFromWatchlist } = useWatchlistMutations();
+  const reorderWatchlist = useReorderWatchlist();
 
   const tmdbWatchlistIdsQuery = useTMDBWatchlistIds();
   const { removeFromTMDBWatchlist } = useTMDBWatchlistMutations();
+  const reorderTMDBWatchlist = useReorderTMDBWatchlist();
 
   const watchlistIds = watchlistIdsQuery.data ?? [];
-  const tmdbWatchlistIds = (tmdbWatchlistIdsQuery.data ?? []).map((id) =>
-    Number(id),
-  );
+  const [tmdbOrder, setTmdbOrder] = useState<number[] | null>(null);
+  const [adminOrder, setAdminOrder] = useState<bigint[] | null>(null);
+
+  const rawTmdbIds = (tmdbWatchlistIdsQuery.data ?? []).map((id) => Number(id));
+  const tmdbWatchlistIds = tmdbOrder ?? rawTmdbIds;
 
   const allMovies: Movie[] =
     allMoviesQuery.data && allMoviesQuery.data.length > 0
       ? allMoviesQuery.data
       : SAMPLE_MOVIES;
-  const watchlistMovies = allMovies.filter((m) =>
+
+  const rawWatchlistMovies = allMovies.filter((m) =>
     watchlistIds.some((id) => id === m.id),
   );
+  const orderedWatchlistMovies = adminOrder
+    ? (adminOrder
+        .map((id) => rawWatchlistMovies.find((m) => m.id === id))
+        .filter(Boolean) as Movie[])
+    : rawWatchlistMovies;
 
-  const handleWatchlistToggle = (movie: Movie) => {
-    const isIn = watchlistIds.some((id) => id === movie.id);
-    if (isIn) {
-      removeFromWatchlist.mutate(movie.id, {
-        onSuccess: () =>
-          toast.success(`Removed "${movie.title}" from your list`),
-      });
-    } else {
-      addToWatchlist.mutate(movie.id, {
-        onSuccess: () => toast.success(`Added "${movie.title}" to your list`),
-      });
-    }
+  const handleRemoveAdmin = (movie: Movie) => {
+    removeFromWatchlist.mutate(movie.id, {
+      onSuccess: () => toast.success(`Removed "${movie.title}" from your list`),
+    });
   };
 
   const handleRemoveTMDB = (tmdbId: number) => {
@@ -137,9 +275,27 @@ export default function WatchlistPage() {
     });
   };
 
+  const moveTMDB = (index: number, direction: "up" | "down") => {
+    const newOrder = [...tmdbWatchlistIds];
+    const swapIdx = direction === "up" ? index - 1 : index + 1;
+    [newOrder[index], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[index]];
+    setTmdbOrder(newOrder);
+    reorderTMDBWatchlist.mutate(newOrder.map((id) => BigInt(id)));
+  };
+
+  const moveAdmin = (index: number, direction: "up" | "down") => {
+    const current = orderedWatchlistMovies.map((m) => m.id);
+    const newOrder = [...current];
+    const swapIdx = direction === "up" ? index - 1 : index + 1;
+    [newOrder[index], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[index]];
+    setAdminOrder(newOrder);
+    reorderWatchlist.mutate(newOrder);
+  };
+
   const isLoading =
     watchlistIdsQuery.isLoading || tmdbWatchlistIdsQuery.isLoading;
-  const isEmpty = watchlistMovies.length === 0 && tmdbWatchlistIds.length === 0;
+  const isEmpty =
+    orderedWatchlistMovies.length === 0 && tmdbWatchlistIds.length === 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -196,18 +352,26 @@ export default function WatchlistPage() {
           </div>
         ) : (
           <div className="space-y-10">
+            <p className="text-xs text-muted-foreground -mt-4">
+              Hover over a poster to reorder with ↑ ↓ arrows
+            </p>
+
             {/* TMDB Watchlist */}
             {tmdbWatchlistIds.length > 0 && (
               <section>
                 <h2 className="font-display font-bold text-xl mb-4 text-foreground">
-                  TMDB Movies
+                  Saved Movies
                 </h2>
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-x-3 gap-y-6">
                   {tmdbWatchlistIds.map((tmdbId, i) => (
                     <div key={tmdbId} data-ocid={`watchlist.item.${i + 1}`}>
                       <TMDBWatchlistItem
                         tmdbId={tmdbId}
+                        index={i}
+                        total={tmdbWatchlistIds.length}
                         onRemove={handleRemoveTMDB}
+                        onMoveUp={(idx) => moveTMDB(idx, "up")}
+                        onMoveDown={(idx) => moveTMDB(idx, "down")}
                       />
                     </div>
                   ))}
@@ -216,21 +380,26 @@ export default function WatchlistPage() {
             )}
 
             {/* Admin/local watchlist */}
-            {watchlistMovies.length > 0 && (
+            {orderedWatchlistMovies.length > 0 && (
               <section>
                 <h2 className="font-display font-bold text-xl mb-4 text-foreground">
                   My Movies
                 </h2>
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-x-3 gap-y-6">
-                  {watchlistMovies.map((movie, i) => (
-                    <MovieCard
+                  {orderedWatchlistMovies.map((movie, i) => (
+                    <div
                       key={movie.id.toString()}
-                      movie={movie}
-                      index={i + 1}
-                      isInWatchlist={true}
-                      onWatchlistToggle={handleWatchlistToggle}
-                      isLoggedIn={isLoggedIn}
-                    />
+                      data-ocid={`watchlist.item.${i + 1}`}
+                    >
+                      <AdminMovieCard
+                        movie={movie}
+                        index={i}
+                        total={orderedWatchlistMovies.length}
+                        onRemove={handleRemoveAdmin}
+                        onMoveUp={(idx) => moveAdmin(idx, "up")}
+                        onMoveDown={(idx) => moveAdmin(idx, "down")}
+                      />
+                    </div>
                   ))}
                 </div>
               </section>

@@ -11,6 +11,7 @@ interface MovieCardProps {
   isInWatchlist?: boolean;
   onWatchlistToggle?: (movie: Movie) => void;
   isLoggedIn?: boolean;
+  isPremium?: boolean;
 }
 
 export default function MovieCard({
@@ -20,6 +21,7 @@ export default function MovieCard({
   isInWatchlist = false,
   onWatchlistToggle,
   isLoggedIn = false,
+  isPremium,
 }: MovieCardProps) {
   const [imgError, setImgError] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -28,6 +30,8 @@ export default function MovieCard({
     movie.thumbnailUrl && !imgError
       ? movie.thumbnailUrl
       : `https://picsum.photos/seed/${movie.id}/300/450`;
+
+  const showPremiumBadge = isPremium ?? movie.isPremium;
 
   // Calculate remaining time: duration is in minutes (bigint), progress is percentage 0–100
   const remainingMins =
@@ -61,6 +65,22 @@ export default function MovieCard({
 
           {/* Gradient overlay on poster */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+
+          {/* Premium badge */}
+          {showPremiumBadge && (
+            <div className="absolute top-2 right-2 z-10">
+              <span
+                className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded text-white shadow-lg"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #FFD700 0%, #FF6B00 100%)",
+                  textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                }}
+              >
+                PREMIUM
+              </span>
+            </div>
+          )}
 
           {/* Progress bar with remaining time tooltip */}
           {progress !== undefined && progress > 0 && (
@@ -132,9 +152,23 @@ export default function MovieCard({
           <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
         </div>
         <div className="p-3">
-          <p className="font-display font-bold text-foreground text-sm leading-tight mb-2 line-clamp-1">
-            {movie.title}
-          </p>
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <p className="font-display font-bold text-foreground text-sm leading-tight line-clamp-1">
+              {movie.title}
+            </p>
+            {showPremiumBadge && (
+              <span
+                className="text-[8px] font-black tracking-wider px-1 py-0.5 rounded flex-shrink-0"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #FFD700 0%, #FF6B00 100%)",
+                  color: "#000",
+                }}
+              >
+                PREMIUM
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 flex-wrap mb-2">
             <span className="flex items-center gap-0.5 text-xs">
               <Star className="w-3 h-3 fill-[#e50914] text-[#e50914]" />

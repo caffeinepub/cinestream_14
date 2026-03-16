@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRef } from "react";
-import type { Movie } from "../backend";
+import type { ContinueWatchingProgress, Movie } from "../backend";
 import MovieCard from "./MovieCard";
 import SectionHeader from "./SectionHeader";
 
@@ -12,7 +12,7 @@ interface MovieRowProps {
   label?: string;
   movies: Movie[];
   watchlistIds?: bigint[];
-  continueWatching?: [bigint, bigint][];
+  continueWatching?: ContinueWatchingProgress[];
   onWatchlistToggle?: (movie: Movie) => void;
   isLoggedIn?: boolean;
   isLoading?: boolean;
@@ -50,7 +50,10 @@ export default function MovieRow({
     });
   };
   const continueMap = new Map(
-    continueWatching.map(([id, prog]) => [id.toString(), Number(prog)]),
+    continueWatching.map((p) => [
+      p.movieId.toString(),
+      Number(p.progressSeconds),
+    ]),
   );
   if (!isLoading && movies.length === 0) return null;
   return (

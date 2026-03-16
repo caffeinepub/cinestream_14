@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import Paywall from "../components/Paywall";
 import { SAMPLE_MOVIES } from "../data/sampleMovies";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
@@ -25,6 +26,7 @@ import {
   useContinueWatching,
   useMovieById,
   useRemoveContinueWatching,
+  useSubscription,
   useUpdateContinueWatching,
   useWatchlistIds,
   useWatchlistMutations,
@@ -74,6 +76,7 @@ export default function MoviePlayerPage() {
   const allMoviesQuery = useAllMovies();
   const watchlistIdsQuery = useWatchlistIds();
   const continueWatchingQuery = useContinueWatching();
+  const { data: sub } = useSubscription();
   const { addToWatchlist, removeFromWatchlist } = useWatchlistMutations();
   const updateContinueWatching = useUpdateContinueWatching();
   const removeContinueWatching = useRemoveContinueWatching();
@@ -131,9 +134,9 @@ export default function MoviePlayerPage() {
   useEffect(() => {
     if (progressRestored) return;
     if (!continueWatchingQuery.data) return;
-    const entry = continueWatchingQuery.data.find(([mid]) => mid === movieId);
+    const entry = continueWatchingQuery.data.find((p) => p.movieId === movieId);
     if (entry) {
-      const savedSeconds = Number(entry[1]);
+      const savedSeconds = Number(entry.progressSeconds);
       if (savedSeconds > 0 && totalSeconds > 0) {
         const pct = (savedSeconds / totalSeconds) * 100;
         setPlayerProgress(Math.min(pct, 99));
@@ -302,6 +305,20 @@ export default function MoviePlayerPage() {
           Back to Home
         </Button>
       </div>
+    );
+  }
+
+  // Paywall gate: premium movies require an active subscription
+  const isSubActive = sub
+    ? Number(sub.expiryDate) > Math.floor(Date.now() / 1000)
+    : false;
+  if (movie.isPremium && !isSubActive) {
+    return (
+      <Paywall
+        movieTitle={movie.title}
+        posterUrl={movie.thumbnailUrl}
+        isLoggedIn={isLoggedIn}
+      />
     );
   }
 

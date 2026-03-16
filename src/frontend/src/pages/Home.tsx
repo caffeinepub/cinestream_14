@@ -58,10 +58,10 @@ export default function HomePage() {
     }
   };
 
-  const continueWatchingPairs = continueWatchingQuery.data ?? [];
+  const continueWatchingEntries = continueWatchingQuery.data ?? [];
   const allMovies = allMoviesQuery.data ?? [];
-  const continueMovies = continueWatchingPairs
-    .map(([id]) => allMovies.find((m) => m.id === id))
+  const continueMovies = continueWatchingEntries
+    .map((entry) => allMovies.find((m) => m.id === entry.movieId))
     .filter(Boolean) as Movie[];
 
   return (
@@ -89,7 +89,7 @@ export default function HomePage() {
             label="RESUME"
             movies={continueMovies}
             watchlistIds={watchlistIds}
-            continueWatching={continueWatchingPairs}
+            continueWatching={continueWatchingEntries}
             onWatchlistToggle={handleWatchlistToggle}
             isLoggedIn={isLoggedIn}
           />

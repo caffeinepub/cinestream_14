@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Movie, MovieInput } from "../backend";
+import type {
+  Movie,
+  MovieInput,
+  ShoppingItem,
+  Subscription,
+  UserProfile,
+} from "../backend";
 import { useActor } from "./useActor";
 
 export function useAllMovies() {
@@ -113,9 +119,11 @@ export function useTMDBWatchlistMutations() {
   return { addToTMDBWatchlist, removeFromTMDBWatchlist };
 }
 
+import type { ContinueWatchingProgress } from "../backend";
+
 export function useContinueWatching() {
   const { actor, isFetching } = useActor();
-  return useQuery<[bigint, bigint][]>({
+  return useQuery<ContinueWatchingProgress[]>({
     queryKey: ["continueWatching"],
     queryFn: async () => {
       if (!actor) return [];
@@ -172,7 +180,7 @@ export function useRemoveContinueWatching() {
   return useMutation({
     mutationFn: async (movieId: bigint) => {
       if (!actor) throw new Error("Not authenticated");
-      return actor.updateContinueWatching(movieId, 0n);
+      return actor.removeContinueWatching(movieId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["continueWatching"] });
@@ -250,6 +258,117 @@ export function useRecordGenreInteraction() {
     }: { genreIds: bigint[]; weight: bigint }) => {
       if (!actor) throw new Error("Not authenticated");
       return actor.recordGenreInteraction(genreIds, weight);
+    },
+  });
+}
+
+export function useSubscription() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Subscription | null>({
+    queryKey: ["subscription"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getSubscription();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useSubscriptionMutations() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  const saveSubscription = useMutation({
+    mutationFn: async (sub: Subscription) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.saveSubscription(sub);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    },
+  });
+
+  const cancelSubscription = useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.cancelSubscription();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
+    },
+  });
+
+  return { saveSubscription, cancelSubscription };
+}
+
+export function useUserProfile() {
+  const { actor, isFetching } = useActor();
+  return useQuery<UserProfile | null>({
+    queryKey: ["userProfile"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getCallerUserProfile();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useUserProfileMutation() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (profile: UserProfile) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.saveCallerUserProfile(profile);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+    },
+  });
+}
+
+export function useReorderWatchlist() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (newOrder: bigint[]) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.reorderWatchlist(newOrder);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["watchlist"] });
+    },
+  });
+}
+
+export function useReorderTMDBWatchlist() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (newOrder: bigint[]) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.reorderTMDBWatchlist(newOrder);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tmdb", "watchlist"] });
+    },
+  });
+}
+
+export function useStripeCheckout() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async ({
+      items,
+      successUrl,
+      cancelUrl,
+    }: {
+      items: ShoppingItem[];
+      successUrl: string;
+      cancelUrl: string;
+    }) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.createCheckoutSession(items, successUrl, cancelUrl);
     },
   });
 }

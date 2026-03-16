@@ -1,22 +1,31 @@
+import Stripe "stripe/stripe";
+import OutCall "http-outcalls/outcall";
 import Array "mo:core/Array";
 import Text "mo:core/Text";
-import Float "mo:core/Float";
+import Int "mo:core/Int";
+import Time "mo:core/Time";
 import Map "mo:core/Map";
+import List "mo:core/List";
 import Nat "mo:core/Nat";
 import Iter "mo:core/Iter";
-import List "mo:core/List";
+import Float "mo:core/Float";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Order "mo:core/Order";
-
+import Migration "migration";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
+(with migration = Migration.run)
 actor {
-  // Types
   type ContinueWatchingProgress = {
     movieId : Nat;
     progressSeconds : Nat;
+  };
+
+  type GenreScore = {
+    genreId : Nat;
+    score : Nat;
   };
 
   public type Movie = {
@@ -30,10 +39,22 @@ actor {
     thumbnailUrl : Text;
     videoUrl : Text;
     isFeatured : Bool;
+    isPremium : Bool;
     categories : [Text];
   };
 
-  // Input type for creating/updating movies (no id)
+  public type Subscription = {
+    plan : Text;
+    paymentId : Text;
+    startDate : Int;
+    expiryDate : Int;
+  };
+
+  public type UserProfile = {
+    displayName : Text;
+    avatarUrl : Text;
+  };
+
   public type MovieInput = {
     title : Text;
     description : Text;
@@ -44,12 +65,23 @@ actor {
     thumbnailUrl : Text;
     videoUrl : Text;
     isFeatured : Bool;
+    isPremium : Bool;
     categories : [Text];
   };
 
-  public type UserProfile = {
-    name : Text;
-  };
+  // State management
+  var nextMovieId = 1;
+  let movies = Map.empty<Nat, Movie>();
+  let watchlists = Map.empty<Principal, List.List<Nat>>();
+  let tmdbWatchlists = Map.empty<Principal, List.List<Nat>>();
+  let continueWatching = Map.empty<Principal, List.List<ContinueWatchingProgress>>();
+  let userProfiles = Map.empty<Principal, UserProfile>();
+  let subscriptions = Map.empty<Principal, Subscription>();
+  let genreScores = Map.empty<Principal, Map.Map<Nat, Nat>>();
+  let accessControlState = AccessControl.initState();
+
+  // Mixin authorization
+  include MixinAuthorization(accessControlState);
 
   module Movie {
     public func compareByRatingAscending(movie1 : Movie, movie2 : Movie) : Order.Order {
@@ -60,82 +92,24 @@ actor {
     };
   };
 
-  // State
-  var nextMovieId = 1; // Track next available movie ID
-
-  // Map from movie ID to Movie
-  let movies = Map.empty<Nat, Movie>();
-
-  // Watchlists: Map from user Principal to List of movie IDs
-  let watchlists = Map.empty<Principal, List.List<Nat>>();
-
-  // TMDB Watchlists: Map from user Principal to List of TMDB movie IDs
-  let tmdbWatchlists = Map.empty<Principal, List.List<Nat>>();
-
-  // Continue Watching: Map from user Principal to List of ContinueWatchingProgress
-  let continueWatching = Map.empty<Principal, List.List<ContinueWatchingProgress>>();
-
-  // User profiles
-  let userProfiles = Map.empty<Principal, UserProfile>();
-
-  // Authorization
-  let accessControlState = AccessControl.initState();
-  include MixinAuthorization(accessControlState);
-
-  // New: Genre interaction store
-  // Stores genre interaction scores for each user (Nat = genreId, Nat = score) (movieId as input)
-  let genreScores = Map.empty<Principal, Map.Map<Nat, Nat>>(); // Principal = user, Nat = genreId, Nat = score
-
-  // ADMIN MOVIE CRUD METHODS
-
-  // Add movie (admin only)
-  public shared ({ caller }) func addMovie(input : MovieInput) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can add movies");
+  module GenreScore {
+    public func compareScoreDescending(a : GenreScore, b : GenreScore) : Order.Order {
+      Nat.compare(b.score, a.score);
     };
-
-    let newMovie : Movie = {
-      input with id = nextMovieId;
-    };
-
-    movies.add(nextMovieId, newMovie);
-    nextMovieId += 1;
-    newMovie.id;
   };
 
-  // Update movie (admin only)
-  public shared ({ caller }) func updateMovie(id : Nat, input : MovieInput) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can update movies");
-    };
-
-    let updatedMovie : Movie = {
-      input with id;
-    };
-
-    switch (movies.get(id)) {
-      case (null) { Runtime.trap("Movie not found") };
-      case (?_) {
-        movies.add(id, updatedMovie);
+  // Helper function to check if user has active subscription
+  func hasActiveSubscription(caller : Principal) : Bool {
+    switch (subscriptions.get(caller)) {
+      case (null) { false };
+      case (?sub) {
+        let currentTime = Time.now() / 1_000_000_000;
+        currentTime >= sub.startDate and currentTime <= sub.expiryDate;
       };
     };
   };
 
-  // Delete movie (admin only)
-  public shared ({ caller }) func deleteMovie(id : Nat) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can delete movies");
-    };
-
-    switch (movies.get(id)) {
-      case (null) { Runtime.trap("Movie not found") };
-      case (?_) {
-        movies.remove(id);
-      };
-    };
-  };
-
-  // Initialize with sample movies (admin only)
+  // Movie Management
   public shared ({ caller }) func initialize() : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can initialize movies");
@@ -153,6 +127,7 @@ actor {
         thumbnailUrl = "inception.jpg";
         videoUrl = "inception.mp4";
         isFeatured = true;
+        isPremium = false;
         categories = ["Trending", "Sci-Fi"];
       },
       {
@@ -166,6 +141,7 @@ actor {
         thumbnailUrl = "shawshank.jpg";
         videoUrl = "shawshank.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Drama", "Classics"];
       },
       {
@@ -179,6 +155,7 @@ actor {
         thumbnailUrl = "dark_knight.jpg";
         videoUrl = "dark_knight.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Action", "Superhero"];
       },
       {
@@ -192,6 +169,7 @@ actor {
         thumbnailUrl = "pulp_fiction.jpg";
         videoUrl = "pulp_fiction.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Crime", "Classics"];
       },
       {
@@ -205,6 +183,7 @@ actor {
         thumbnailUrl = "forrest_gump.jpg";
         videoUrl = "forrest_gump.mp4";
         isFeatured = true;
+        isPremium = false;
         categories = ["Drama", "Biography"];
       },
       {
@@ -218,6 +197,7 @@ actor {
         thumbnailUrl = "matrix.jpg";
         videoUrl = "matrix.mp4";
         isFeatured = true;
+        isPremium = false;
         categories = ["Sci-Fi", "Action"];
       },
       {
@@ -231,6 +211,7 @@ actor {
         thumbnailUrl = "fight_club.jpg";
         videoUrl = "fight_club.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Drama", "Thriller"];
       },
       {
@@ -244,6 +225,7 @@ actor {
         thumbnailUrl = "interstellar.jpg";
         videoUrl = "interstellar.mp4";
         isFeatured = true;
+        isPremium = false;
         categories = ["Sci-Fi", "Adventure"];
       },
       {
@@ -257,6 +239,7 @@ actor {
         thumbnailUrl = "gladiator.jpg";
         videoUrl = "gladiator.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Action", "Historical"];
       },
       {
@@ -270,6 +253,7 @@ actor {
         thumbnailUrl = "godfather.jpg";
         videoUrl = "godfather.mp4";
         isFeatured = true;
+        isPremium = false;
         categories = ["Crime", "Classics"];
       },
       {
@@ -283,6 +267,7 @@ actor {
         thumbnailUrl = "lotr_fellowship.jpg";
         videoUrl = "lotr_fellowship.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Fantasy", "Adventure"];
       },
       {
@@ -296,6 +281,7 @@ actor {
         thumbnailUrl = "star_wars_iv.jpg";
         videoUrl = "star_wars_iv.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Sci-Fi", "Adventure"];
       },
       {
@@ -309,6 +295,7 @@ actor {
         thumbnailUrl = "jurassic_park.jpg";
         videoUrl = "jurassic_park.mp4";
         isFeatured = true;
+        isPremium = false;
         categories = ["Adventure", "Sci-Fi"];
       },
       {
@@ -322,6 +309,7 @@ actor {
         thumbnailUrl = "avatar.jpg";
         videoUrl = "avatar.mp4";
         isFeatured = false;
+        isPremium = false;
         categories = ["Sci-Fi", "Adventure"];
       },
       {
@@ -335,6 +323,7 @@ actor {
         thumbnailUrl = "titanic.jpg";
         videoUrl = "titanic.mp4";
         isFeatured = true;
+        isPremium = false;
         categories = ["Drama", "Romance"];
       },
     ];
@@ -346,15 +335,65 @@ actor {
     nextMovieId := 16;
   };
 
-  // General Query Functions
+  public shared ({ caller }) func addMovie(input : MovieInput) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can add movies");
+    };
 
+    let newMovie : Movie = {
+      input with id = nextMovieId;
+    };
+
+    movies.add(nextMovieId, newMovie);
+    nextMovieId += 1;
+    newMovie.id;
+  };
+
+  public shared ({ caller }) func updateMovie(id : Nat, input : MovieInput) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can update movies");
+    };
+
+    let updatedMovie : Movie = {
+      input with id;
+    };
+
+    switch (movies.get(id)) {
+      case (null) { Runtime.trap("Movie not found") };
+      case (?_) {
+        movies.add(id, updatedMovie);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteMovie(id : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can delete movies");
+    };
+
+    switch (movies.get(id)) {
+      case (null) { Runtime.trap("Movie not found") };
+      case (?_) {
+        movies.remove(id);
+      };
+    };
+  };
+
+  // Movie Queries
   public query ({ caller }) func getAllMovies() : async [Movie] {
     movies.values().toArray();
   };
 
   public query ({ caller }) func getMovieById(id : Nat) : async Movie {
     switch (movies.get(id)) {
-      case (?movie) { movie };
+      case (?movie) {
+        if (movie.isPremium) {
+          if (not AccessControl.isAdmin(accessControlState, caller) and not hasActiveSubscription(caller)) {
+            Runtime.trap("Unauthorized: Premium content requires an active subscription");
+          };
+        };
+        movie;
+      };
       case (null) { Runtime.trap("Movie not found") };
     };
   };
@@ -389,7 +428,16 @@ actor {
     featured.sort(Movie.compareByRatingAscending);
   };
 
-  // User Profile Functions
+  public query ({ caller }) func getPremiumMovies() : async [Movie] {
+    if (not AccessControl.isAdmin(accessControlState, caller) and not hasActiveSubscription(caller)) {
+      Runtime.trap("Unauthorized: Premium content requires an active subscription");
+    };
+    let allMovies = movies.values().toArray();
+    let premium = allMovies.filter(func(movie) { movie.isPremium });
+    premium.sort(Movie.compareByRatingAscending);
+  };
+
+  // User Profile Management
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can access profiles");
@@ -411,16 +459,74 @@ actor {
     userProfiles.add(caller, profile);
   };
 
-  // WATCHLIST METHODS
+  // Subscription Management
+  public shared ({ caller }) func saveSubscription(subscription : Subscription) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can save subscriptions");
+    };
+    subscriptions.add(caller, subscription);
+  };
 
+  public query ({ caller }) func getSubscription() : async ?Subscription {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can get subscriptions");
+    };
+    subscriptions.get(caller);
+  };
+
+  public shared ({ caller }) func cancelSubscription() : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can cancel subscriptions");
+    };
+    subscriptions.remove(caller);
+  };
+
+  // Stripe Integration
+  var stripeConfig : ?Stripe.StripeConfiguration = null;
+
+  public shared ({ caller }) func setStripeConfiguration(config : Stripe.StripeConfiguration) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can set Stripe configuration");
+    };
+    stripeConfig := ?config;
+  };
+
+  public query ({ caller }) func isStripeConfigured() : async Bool {
+    stripeConfig != null;
+  };
+
+  func getStripeConfig() : Stripe.StripeConfiguration {
+    switch (stripeConfig) {
+      case (null) { Runtime.trap("Stripe must be configured before using it") };
+      case (?config) { config };
+    };
+  };
+
+  public func getStripeSessionStatus(sessionId : Text) : async Stripe.StripeSessionStatus {
+    await Stripe.getSessionStatus(getStripeConfig(), sessionId, transform);
+  };
+
+  public shared ({ caller }) func createCheckoutSession(items : [Stripe.ShoppingItem], successUrl : Text, cancelUrl : Text) : async Text {
+    await Stripe.createCheckoutSession(getStripeConfig(), caller, items, successUrl, cancelUrl, transform);
+  };
+
+  public query ({ caller }) func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+    OutCall.transform(input);
+  };
+
+  // Watchlist Methods
   public shared ({ caller }) func addToWatchlist(movieId : Nat) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only authenticated users can add to watchlist");
     };
-    // Validate movie exists
+
     switch (movies.get(movieId)) {
       case (null) { Runtime.trap("Movie not found") };
-      case (?_) {};
+      case (?movie) {
+        if (movie.isPremium and not hasActiveSubscription(caller) and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Cannot add premium content without active subscription");
+        };
+      };
     };
 
     switch (watchlists.get(caller)) {
@@ -453,6 +559,15 @@ actor {
     };
   };
 
+  public shared ({ caller }) func reorderWatchlist(newOrder : [Nat]) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can reorder watchlist");
+    };
+    let validIds = newOrder.filter(func(movieId) { switch (movies.get(movieId)) { case (?_) { true }; case (null) { false } } });
+    let newWatchlist = List.fromArray<Nat>(validIds);
+    watchlists.add(caller, newWatchlist);
+  };
+
   public query ({ caller }) func getWatchlistIds() : async [Nat] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can access watchlist");
@@ -463,8 +578,7 @@ actor {
     };
   };
 
-  // TMDB WATCHLIST METHODS
-
+  // TMDB Watchlist Methods
   public shared ({ caller }) func addToTMDBWatchlist(tmdbMovieId : Nat) : async () {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only authenticated users can add to TMDB watchlist");
@@ -500,6 +614,14 @@ actor {
     };
   };
 
+  public shared ({ caller }) func reorderTMDBWatchlist(newOrder : [Nat]) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can reorder TMDB watchlist");
+    };
+    let newWatchlist = List.fromArray<Nat>(newOrder);
+    tmdbWatchlists.add(caller, newWatchlist);
+  };
+
   public query ({ caller }) func getTMDBWatchlistIds() : async [Nat] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can access TMDB watchlist");
@@ -510,8 +632,7 @@ actor {
     };
   };
 
-  // CONTINUE WATCHING METHODS
-
+  // Continue Watching Methods
   public shared ({ caller }) func updateContinueWatching(movieId : Nat, progress : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can update continue watching progress");
@@ -519,7 +640,11 @@ actor {
 
     switch (movies.get(movieId)) {
       case (null) { Runtime.trap("Movie not found") };
-      case (?_) {};
+      case (?movie) {
+        if (movie.isPremium and not hasActiveSubscription(caller) and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Cannot track progress for premium content without active subscription");
+        };
+      };
     };
 
     let newProgress : ContinueWatchingProgress = {
@@ -540,21 +665,31 @@ actor {
     };
   };
 
-  public query ({ caller }) func getContinueWatching() : async [(Nat, Nat)] {
+  public query ({ caller }) func getContinueWatching() : async [ContinueWatchingProgress] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can access continue watching");
     };
     switch (continueWatching.get(caller)) {
       case (null) { [] };
       case (?progressList) {
-        let reversed = progressList.reverse();
-        let filtered = reversed.toArray().filter(func(p) { p.progressSeconds > 0 });
-        filtered.map(func(p) { (p.movieId, p.progressSeconds) });
+        progressList.toArray().filter(func(p) { p.progressSeconds > 0 });
       };
     };
   };
 
-  // New: Track genre interaction
+  public shared ({ caller }) func removeContinueWatching(movieId : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can remove continue watching entries");
+    };
+    switch (continueWatching.get(caller)) {
+      case (null) { Runtime.trap("No continue watching entries found") };
+      case (?progressList) {
+        let filtered = progressList.filter(func(p) { p.movieId != movieId });
+        continueWatching.add(caller, filtered);
+      };
+    };
+  };
+
   public shared ({ caller }) func recordGenreInteraction(genreIds : [Nat], weight : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can record genre interaction");
@@ -576,7 +711,6 @@ actor {
     genreScores.add(caller, currentUserScores);
   };
 
-  // New: Get top genres
   public query ({ caller }) func getTopGenres() : async [Nat] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can get top genres");
@@ -585,17 +719,10 @@ actor {
     switch (genreScores.get(caller)) {
       case (null) { [] };
       case (?userScores) {
-        // Convert to array, sort by score descending
-        let array = userScores.toArray();
-        let sorted = array.sort(
-          func(a, b) {
-            // Compare scores (b comes before a for descending order)
-            Nat.compare(b.1, a.1);
-          }
-        );
-
+        let genreArray : [GenreScore] = userScores.toArray().map(func(entry) { { genreId = entry.0; score = entry.1 } });
+        let sorted = genreArray.sort(GenreScore.compareScoreDescending);
         let top5 = sorted.sliceToArray(0, if (sorted.size() < 5) { sorted.size() } else { 5 });
-        top5.map(func(entry) { entry.0 });
+        top5.map(func(entry) { entry.genreId });
       };
     };
   };
