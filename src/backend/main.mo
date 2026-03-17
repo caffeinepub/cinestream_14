@@ -12,6 +12,7 @@ import Float "mo:core/Float";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Order "mo:core/Order";
+import Debug "mo:core/Debug";
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
@@ -726,29 +727,70 @@ actor {
       };
     };
   };
-  // TMDB Proxy Methods
-  // API key stored securely in backend — never exposed to the browser
+
+  // ─── TMDB Proxy Methods ───────────────────────────────────────────────────
+  // API key stored securely in backend — never exposed to the browser.
   let tmdbApiKey = "fadb0b01b6573c9e09695a7b0498aa71";
   let tmdbBase = "https://api.themoviedb.org/3";
 
-  // Simple in-memory cache: endpoint -> (timestamp, body)
+  // In-memory cache: endpoint -> (timestamp, bodyText)
   let tmdbCache = Map.empty<Text, (Int, Text)>();
   let tmdbCacheTTL : Int = 30 * 60 * 1_000_000_000; // 30 minutes in nanoseconds
 
+  // Fetch from TMDB with:
+  //   1. Fresh-cache short-circuit (30 min TTL)
+  //   2. HTTP outcall with UTF-8 decode
+  //   3. On any failure, fall back to stale cache or "{}"
   func tmdbCachedFetch(path : Text) : async Text {
     let now = Time.now();
+
+    // Check fresh cache first
     switch (tmdbCache.get(path)) {
       case (?(ts, body)) {
         if (now - ts < tmdbCacheTTL) {
+          Debug.print("[TMDB Backend] cache hit: " # path);
           return body;
         };
       };
       case (null) {};
     };
+
+    Debug.print("[TMDB Backend] request start: " # path);
+
     let url = tmdbBase # path # (if (path.contains(#char '?')) { "&" } else { "?" }) # "api_key=" # tmdbApiKey;
-    let body = await OutCall.httpGetRequest(url, [], transform);
-    tmdbCache.add(path, (now, body));
-    body;
+
+    // Perform the HTTP outcall; on failure return stale cache or "{}"
+    let bodyText : Text = try {
+      let raw = await OutCall.httpGetRequest(url, [], transform);
+      Debug.print("[TMDB Backend] response received: " # path);
+      // Validate we got actual JSON content (not empty / error string)
+      if (raw == "" or raw == "{}") {
+        Debug.print("[TMDB Backend] empty response for: " # path);
+        // Fall through to stale cache below
+        switch (tmdbCache.get(path)) {
+          case (?(_, stale)) {
+            Debug.print("[TMDB Backend] returning stale cache for: " # path);
+            return stale;
+          };
+          case (null) { return "{}" };
+        };
+      };
+      raw;
+    } catch (_) {
+      Debug.print("[TMDB Backend] request failed for: " # path);
+      // Return stale cached data if available, otherwise empty JSON
+      switch (tmdbCache.get(path)) {
+        case (?(_, stale)) {
+          Debug.print("[TMDB Backend] returning stale cache after failure: " # path);
+          return stale;
+        };
+        case (null) { return "{}" };
+      };
+    };
+
+    // Update cache with fresh decoded text
+    tmdbCache.add(path, (now, bodyText));
+    bodyText;
   };
 
   public func getTrending() : async Text {

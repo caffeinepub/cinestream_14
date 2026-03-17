@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -10,11 +9,11 @@ import {
   Loader2,
   Play,
   Star,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import TMDBMovieCard from "../components/TMDBMovieCard";
+import TrailerModal from "../components/TrailerModal";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useRecordGenreInteraction,
@@ -92,7 +91,7 @@ export default function TMDBMovieDetailPage() {
       const url = `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=fadb0b01b6573c9e09695a7b0498aa71`;
       const res = await fetch(url);
       const data = await res.json();
-      console.log("TMDB video response:", data);
+      console.log("[TMDB] video response:", data);
 
       const videos: Array<{
         site: string;
@@ -100,29 +99,25 @@ export default function TMDBMovieDetailPage() {
         key: string;
         official?: boolean;
       }> = data.results ?? [];
+
+      // Only use YouTube Trailers — no Teaser fallback
       const youtubeTrailer =
         videos.find(
           (v) => v.site === "YouTube" && v.type === "Trailer" && v.official,
         ) ??
         videos.find((v) => v.site === "YouTube" && v.type === "Trailer") ??
-        videos.find(
-          (v) => v.site === "YouTube" && v.type === "Teaser" && v.official,
-        ) ??
-        videos.find((v) => v.site === "YouTube" && v.type === "Teaser") ??
         null;
 
-      console.log("Selected trailer:", youtubeTrailer?.key ?? "none");
+      console.log("[TMDB] Selected trailer:", youtubeTrailer?.key ?? "none");
 
-      if (!youtubeTrailer) {
-        toast.error("Trailer not available");
-        return;
-      }
-
-      setTrailerKey(youtubeTrailer.key);
+      // Open modal with key (or null = show "not available")
+      setTrailerKey(youtubeTrailer?.key ?? null);
       setTrailerOpen(true);
     } catch (err) {
-      console.error("Failed to fetch trailer:", err);
-      toast.error("Failed to load trailer");
+      console.error("[TMDB] Failed to fetch trailer:", err);
+      // Still open modal — it will show "not available" state
+      setTrailerKey(null);
+      setTrailerOpen(true);
     } finally {
       setTrailerLoading(false);
     }
@@ -348,60 +343,14 @@ export default function TMDBMovieDetailPage() {
       )}
 
       {/* Trailer Modal */}
-      <Dialog
+      <TrailerModal
+        trailerKey={trailerKey}
         open={trailerOpen}
-        onOpenChange={(open) => {
-          setTrailerOpen(open);
-          if (!open) setTrailerKey(null);
+        onClose={() => {
+          setTrailerOpen(false);
+          setTrailerKey(null);
         }}
-      >
-        <DialogContent
-          aria-label="Movie Trailer"
-          showCloseButton={false}
-          className="max-w-3xl w-full p-0 overflow-hidden bg-black border-border"
-          data-ocid="tmdb_detail.dialog"
-        >
-          <div className="relative w-full">
-            <button
-              type="button"
-              data-ocid="tmdb_detail.close_button"
-              onClick={() => {
-                setTrailerOpen(false);
-                setTrailerKey(null);
-              }}
-              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
-            >
-              <X className="w-4 h-4 text-white" />
-            </button>
-
-            {trailerKey ? (
-              <div
-                className="w-full"
-                style={{ paddingBottom: "56.25%", position: "relative" }}
-              >
-                <iframe
-                  src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&rel=0&modestbranding=1`}
-                  title="Movie Trailer"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    border: 0,
-                  }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-64 text-white text-lg">
-                Trailer not available
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      />
     </div>
   );
 }

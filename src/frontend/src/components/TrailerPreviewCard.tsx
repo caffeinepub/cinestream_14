@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 const TMDB_API_KEY = "fadb0b01b6573c9e09695a7b0498aa71";
 const OVERLAY_WIDTH = 300;
+const PREVIEW_LOAD_TIMEOUT = 5000;
 
 // Module-level cache to avoid duplicate trailer fetches
 const trailerCache = new Map<number, string | "none">();
@@ -36,16 +37,19 @@ export default function TrailerPreviewCard({
   isLoggedIn = false,
 }: TrailerPreviewCardProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [noTrailer, setNoTrailer] = useState(false);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [isMobile] = useState(() => isMobileDevice());
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+      if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
     };
   }, []);
 
@@ -60,6 +64,11 @@ export default function TrailerPreviewCard({
       } else {
         setTrailerKey(cached);
         setNoTrailer(false);
+        // Start load timeout for cached key too
+        if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+        loadTimerRef.current = setTimeout(() => {
+          setNoTrailer(true);
+        }, PREVIEW_LOAD_TIMEOUT);
       }
       return;
     }
@@ -75,17 +84,24 @@ export default function TrailerPreviewCard({
         key: string;
         official?: boolean;
       }> = data.results ?? [];
+
+      // Only YouTube Trailers — no Teaser fallback
       const trailer =
         videos.find(
           (v) => v.site === "YouTube" && v.type === "Trailer" && v.official,
         ) ??
         videos.find((v) => v.site === "YouTube" && v.type === "Trailer") ??
-        videos.find((v) => v.site === "YouTube" && v.type === "Teaser") ??
         null;
+
       if (trailer) {
         trailerCache.set(movieId, trailer.key);
         setTrailerKey(trailer.key);
         setNoTrailer(false);
+        // Start 5s load timeout
+        if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+        loadTimerRef.current = setTimeout(() => {
+          setNoTrailer(true);
+        }, PREVIEW_LOAD_TIMEOUT);
       } else {
         trailerCache.set(movieId, "none");
         setTrailerKey(null);
@@ -99,8 +115,8 @@ export default function TrailerPreviewCard({
   };
 
   const handleMouseEnter = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
       if (wrapperRef.current) {
         setRect(wrapperRef.current.getBoundingClientRect());
         setShowOverlay(true);
@@ -110,13 +126,26 @@ export default function TrailerPreviewCard({
   };
 
   const handleMouseLeave = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    if (loadTimerRef.current) {
+      clearTimeout(loadTimerRef.current);
+      loadTimerRef.current = null;
     }
     setShowOverlay(false);
     setTrailerKey(null);
     setNoTrailer(false);
+    setIframeLoaded(false);
+  };
+
+  const handleIframeLoad = () => {
+    if (loadTimerRef.current) {
+      clearTimeout(loadTimerRef.current);
+      loadTimerRef.current = null;
+    }
+    setIframeLoaded(true);
   };
 
   const overlayLeft = rect
@@ -140,6 +169,9 @@ export default function TrailerPreviewCard({
     onWatchlistToggle?.();
   };
 
+  const showSpinner = trailerKey && !iframeLoaded && !noTrailer;
+  const showNoPreview = noTrailer || (!trailerKey && !showSpinner);
+
   return (
     <div
       ref={wrapperRef}
@@ -154,7 +186,7 @@ export default function TrailerPreviewCard({
         createPortal(
           <div
             onMouseEnter={() => {
-              if (timerRef.current) clearTimeout(timerRef.current);
+              if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
             }}
             onMouseLeave={handleMouseLeave}
             style={{
@@ -171,28 +203,37 @@ export default function TrailerPreviewCard({
               className="relative bg-black"
               style={{ width: OVERLAY_WIDTH, height: 168 }}
             >
-              {trailerKey ? (
-                <iframe
-                  key={trailerKey}
-                  src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&loop=1&playlist=${trailerKey}&rel=0&showinfo=0`}
-                  allow="autoplay; encrypted-media"
-                  allowFullScreen
-                  className="w-full h-full border-0"
-                  title={`${title} trailer`}
-                />
-              ) : noTrailer ? (
-                <div className="w-full h-full flex items-center justify-center bg-secondary/60">
-                  <span className="text-xs text-muted-foreground">
-                    No trailer available
-                  </span>
-                </div>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-secondary/60">
+              {/* Spinner */}
+              {showSpinner && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
                   <div
                     className="w-6 h-6 rounded-full border-2 border-white/40 border-t-white"
                     style={{ animation: "previewSpin 0.7s linear infinite" }}
                   />
                 </div>
+              )}
+
+              {/* No preview fallback */}
+              {showNoPreview && (
+                <div className="w-full h-full flex items-center justify-center bg-secondary/60">
+                  <span className="text-xs text-muted-foreground">
+                    No preview
+                  </span>
+                </div>
+              )}
+
+              {/* iframe */}
+              {trailerKey && (
+                <iframe
+                  key={trailerKey}
+                  src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0`}
+                  onLoad={handleIframeLoad}
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen
+                  className="w-full h-full border-0"
+                  style={{ opacity: iframeLoaded ? 1 : 0 }}
+                  title={`${title} trailer`}
+                />
               )}
             </div>
 
