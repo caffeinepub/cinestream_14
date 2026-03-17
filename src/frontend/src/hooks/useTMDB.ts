@@ -1,21 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { fetchSearchMovies } from "../services/tmdb";
 import {
+  fetchMovieDetailsViaBackend,
   fetchMoviesByGenreViaBackend,
   fetchNowPlayingViaBackend,
   fetchPopularViaBackend,
+  fetchSimilarMoviesViaBackend,
   fetchTopRatedViaBackend,
   fetchTrendingViaBackend,
   fetchUpcomingViaBackend,
 } from "../services/tmdbBackend";
-import type { TMDBMovie, TMDBMovieDetail, TMDBVideo } from "../types/tmdb";
+import type { TMDBMovie, TMDBMovieDetail } from "../types/tmdb";
 import { useActor } from "./useActor";
 
-const STALE = 5 * 60 * 1000;
-
-// All TMDB list endpoints route through the Motoko backend (HTTP outcalls)
-// so the browser never calls TMDB directly. This fixes ISP blocks.
+const STALE = 1000 * 60 * 5; // 5 minutes
 
 export function useTMDBTrending() {
   const { actor } = useActor();
@@ -23,25 +20,12 @@ export function useTMDBTrending() {
     queryKey: ["tmdb", "trending"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      return fetchTrendingViaBackend(actor);
+      const results = await fetchTrendingViaBackend(actor);
+      return results || [];
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 1,
-  });
-}
-
-export function useTMDBPopular() {
-  const { actor } = useActor();
-  return useQuery<TMDBMovie[]>({
-    queryKey: ["tmdb", "popular"],
-    queryFn: async () => {
-      if (!actor) throw new Error("Actor not ready");
-      return fetchPopularViaBackend(actor);
-    },
-    enabled: !!actor,
-    staleTime: STALE,
-    retry: 1,
+    retry: 2,
   });
 }
 
@@ -51,11 +35,12 @@ export function useTMDBTopRated() {
     queryKey: ["tmdb", "top_rated"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      return fetchTopRatedViaBackend(actor);
+      const results = await fetchTopRatedViaBackend(actor);
+      return results || [];
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 1,
+    retry: 2,
   });
 }
 
@@ -65,11 +50,27 @@ export function useTMDBUpcoming() {
     queryKey: ["tmdb", "upcoming"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      return fetchUpcomingViaBackend(actor);
+      const results = await fetchUpcomingViaBackend(actor);
+      return results || [];
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 1,
+    retry: 2,
+  });
+}
+
+export function useTMDBPopular() {
+  const { actor } = useActor();
+  return useQuery<TMDBMovie[]>({
+    queryKey: ["tmdb", "popular"],
+    queryFn: async () => {
+      if (!actor) throw new Error("Actor not ready");
+      const results = await fetchPopularViaBackend(actor);
+      return results || [];
+    },
+    enabled: !!actor,
+    staleTime: STALE,
+    retry: 2,
   });
 }
 
@@ -79,11 +80,12 @@ export function useTMDBNowPlaying() {
     queryKey: ["tmdb", "now_playing"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      return fetchNowPlayingViaBackend(actor);
+      const results = await fetchNowPlayingViaBackend(actor);
+      return results || [];
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 1,
+    retry: 2,
   });
 }
 
@@ -93,96 +95,63 @@ export function useTMDBByGenre(genreId: number) {
     queryKey: ["tmdb", "genre", genreId],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      return fetchMoviesByGenreViaBackend(actor, genreId);
+      const results = await fetchMoviesByGenreViaBackend(actor, genreId);
+      return results || [];
     },
-    enabled: !!actor,
+    enabled: !!actor && genreId > 0,
     staleTime: STALE,
-    retry: 1,
-  });
-}
-
-export function useTMDBMovieDetail(id: number | null) {
-  const { actor } = useActor();
-  const validId = id !== null && !Number.isNaN(id) && id > 0;
-  return useQuery<TMDBMovieDetail>({
-    queryKey: ["tmdb", "movie", id],
-    queryFn: async () => {
-      if (!actor) throw new Error("Actor not ready");
-      if (!validId) throw new Error("Invalid movie ID");
-      const raw = await (actor as any).getMovieDetails(BigInt(id!));
-      const data = JSON.parse(
-        typeof raw === "string" ? raw || "{}" : "{}",
-      ) as TMDBMovieDetail;
-      if (!data.id) throw new Error("Movie not found");
-      return data;
-    },
-    enabled: validId && !!actor,
-    staleTime: STALE,
-    retry: 1,
-  });
-}
-
-export function useTMDBVideos(id: number | null) {
-  const { actor } = useActor();
-  const validId = id !== null && !Number.isNaN(id) && id > 0;
-  return useQuery<TMDBVideo | null>({
-    queryKey: ["tmdb", "videos", id],
-    queryFn: async () => {
-      if (!actor) throw new Error("Actor not ready");
-      const raw = await (actor as any).getMovieVideos(BigInt(id!));
-      const parsed = JSON.parse(
-        typeof raw === "string" ? raw || "{}" : "{}",
-      ) as { results?: TMDBVideo[] };
-      const youtubeVideos = (
-        Array.isArray(parsed.results) ? parsed.results : []
-      ).filter((v) => v.site === "YouTube");
-      return (
-        youtubeVideos.find((v) => v.type === "Trailer" && v.official) ??
-        youtubeVideos.find((v) => v.type === "Trailer") ??
-        youtubeVideos.find((v) => v.type === "Teaser" && v.official) ??
-        youtubeVideos.find((v) => v.type === "Teaser") ??
-        null
-      );
-    },
-    enabled: validId && !!actor,
-    staleTime: STALE,
-    retry: 1,
-  });
-}
-
-export function useTMDBSimilar(id: number | null) {
-  const { actor } = useActor();
-  const validId = id !== null && !Number.isNaN(id) && id > 0;
-  return useQuery<TMDBMovie[]>({
-    queryKey: ["tmdb", "similar", id],
-    queryFn: async () => {
-      if (!actor) throw new Error("Actor not ready");
-      const raw = await (actor as any).getSimilarMovies(BigInt(id!));
-      const data = JSON.parse(typeof raw === "string" ? raw || "{}" : "{}");
-      return Array.isArray(data.results) ? data.results : [];
-    },
-    enabled: validId && !!actor,
-    staleTime: STALE,
-    retry: 1,
+    retry: 2,
   });
 }
 
 export function useTMDBSearch(query: string) {
-  const [debouncedQuery, setDebouncedQuery] = useState(query);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
-    queryKey: ["tmdb", "search", debouncedQuery],
+    queryKey: ["tmdb", "search", query],
     queryFn: async () => {
-      const data = await fetchSearchMovies(debouncedQuery);
-      return Array.isArray(data.results) ? data.results : [];
+      if (!actor) throw new Error("Actor not ready");
+      if (!query.trim()) return [];
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const raw = await (actor as any).searchMovies(query);
+        const data = JSON.parse(typeof raw === "string" ? raw || "{}" : "{}");
+        return Array.isArray(data.results) ? data.results : [];
+      } catch {
+        return [];
+      }
     },
-    enabled: debouncedQuery.length >= 2,
-    staleTime: STALE,
+    enabled: !!actor && query.trim().length > 0,
+    staleTime: 1000 * 60 * 2,
     retry: 1,
+  });
+}
+
+export function useTMDBMovieDetail(id: number) {
+  const { actor } = useActor();
+  return useQuery<TMDBMovieDetail | null>({
+    queryKey: ["tmdb", "movie", id],
+    queryFn: async () => {
+      if (!actor || !id) return null;
+      const data = await fetchMovieDetailsViaBackend(actor, id);
+      return (data as unknown as TMDBMovieDetail) || null;
+    },
+    enabled: !!actor && id > 0,
+    staleTime: STALE,
+    retry: 2,
+  });
+}
+
+export function useTMDBSimilar(id: number) {
+  const { actor } = useActor();
+  return useQuery<TMDBMovie[]>({
+    queryKey: ["tmdb", "similar", id],
+    queryFn: async () => {
+      if (!actor || !id) return [];
+      const results = await fetchSimilarMoviesViaBackend(actor, id);
+      return results || [];
+    },
+    enabled: !!actor && id > 0,
+    staleTime: STALE,
+    retry: 2,
   });
 }

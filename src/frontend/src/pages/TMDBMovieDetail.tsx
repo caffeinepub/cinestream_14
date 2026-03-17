@@ -39,9 +39,9 @@ export default function TMDBMovieDetailPage() {
     data: movie,
     isLoading,
     isError,
-  } = useTMDBMovieDetail(isValidId ? movieId : null);
+  } = useTMDBMovieDetail(isValidId ? movieId : 0);
   const { data: similarMovies, isLoading: isSimilarLoading } = useTMDBSimilar(
-    isValidId ? movieId : null,
+    isValidId ? movieId : 0,
   );
 
   const { data: watchlistIds } = useTMDBWatchlistIds();
