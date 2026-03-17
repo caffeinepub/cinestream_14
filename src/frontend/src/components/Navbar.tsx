@@ -24,6 +24,7 @@ import {
   Loader2,
   LogOut,
   Menu,
+  Music,
   Search,
   Settings,
   Star,
@@ -158,6 +159,13 @@ export default function Navbar() {
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               Browse
+            </Link>
+            <Link
+              to="/music"
+              data-ocid="nav.music_link"
+              className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+            >
+              <Music className="w-4 h-4" /> Music
             </Link>
             {isLoggedIn && (
               <Link
@@ -453,6 +461,14 @@ export default function Navbar() {
               onClick={() => setMobileOpen(false)}
             >
               Browse
+            </Link>
+            <Link
+              to="/music"
+              data-ocid="nav.music_link"
+              className="text-sm py-2 flex items-center gap-2"
+              onClick={() => setMobileOpen(false)}
+            >
+              <Music className="w-4 h-4" style={{ color: "#1DB954" }} /> Music
             </Link>
             {isLoggedIn && (
               <Link

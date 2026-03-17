@@ -13,6 +13,7 @@ import LoadingScreen from "./components/LoadingScreen";
 import AdminPage from "./pages/Admin";
 import HomePage from "./pages/Home";
 import MoviePlayerPage from "./pages/MoviePlayer";
+import MusicPage from "./pages/Music";
 import SearchPage from "./pages/Search";
 import SubscriptionPage from "./pages/Subscription";
 import SubscriptionSuccessPage from "./pages/SubscriptionSuccess";
@@ -107,6 +108,11 @@ const subscriptionSuccessRoute = createRoute({
   path: "/subscription/success",
   component: SubscriptionSuccessPage,
 });
+const musicRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/music",
+  component: MusicPage,
+});
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
@@ -117,6 +123,7 @@ const routeTree = rootRoute.addChildren([
   tmdbMovieRoute,
   subscriptionRoute,
   subscriptionSuccessRoute,
+  musicRoute,
 ]);
 const router = createRouter({ routeTree });
 
