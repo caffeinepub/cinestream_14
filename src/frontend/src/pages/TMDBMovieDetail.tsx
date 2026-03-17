@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import TMDBMovieCard from "../components/TMDBMovieCard";
 import TrailerModal from "../components/TrailerModal";
+import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useRecordGenreInteraction,
@@ -28,6 +29,7 @@ export default function TMDBMovieDetailPage() {
   const movieId = Number(id);
   const navigate = useNavigate();
 
+  const { actor } = useActor();
   const { loginStatus, identity } = useInternetIdentity();
   const isLoggedIn = loginStatus === "success" && !!identity;
 
@@ -88,34 +90,26 @@ export default function TMDBMovieDetailPage() {
   const handlePlayTrailer = async () => {
     setTrailerLoading(true);
     try {
-      const url = `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=fadb0b01b6573c9e09695a7b0498aa71`;
-      const res = await fetch(url);
-      const data = await res.json();
-      console.log("[TMDB] video response:", data);
-
+      const raw = await (actor as any).getMovieVideos(BigInt(movieId));
+      console.log("[Frontend] Raw trailer videos:", raw);
+      const data = JSON.parse(typeof raw === "string" ? raw || "{}" : "{}");
       const videos: Array<{
         site: string;
         type: string;
         key: string;
         official?: boolean;
-      }> = data.results ?? [];
-
-      // Only use YouTube Trailers — no Teaser fallback
+      }> = Array.isArray(data.results) ? data.results : [];
       const youtubeTrailer =
         videos.find(
           (v) => v.site === "YouTube" && v.type === "Trailer" && v.official,
         ) ??
         videos.find((v) => v.site === "YouTube" && v.type === "Trailer") ??
         null;
-
       console.log("[TMDB] Selected trailer:", youtubeTrailer?.key ?? "none");
-
-      // Open modal with key (or null = show "not available")
       setTrailerKey(youtubeTrailer?.key ?? null);
       setTrailerOpen(true);
     } catch (err) {
       console.error("[TMDB] Failed to fetch trailer:", err);
-      // Still open modal — it will show "not available" state
       setTrailerKey(null);
       setTrailerOpen(true);
     } finally {

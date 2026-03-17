@@ -1,14 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { fetchSearchMovies, fetchUpcomingMovies } from "../services/tmdb";
 import {
-  fetchMovieDetail,
-  fetchMovieVideos,
-  fetchMoviesByGenre,
-  fetchSearchMovies,
-  fetchSimilarMovies,
-  fetchUpcomingMovies,
-} from "../services/tmdb";
-import {
+  fetchMoviesByGenreViaBackend,
   fetchNowPlayingViaBackend,
   fetchPopularViaBackend,
   fetchTopRatedViaBackend,
@@ -124,16 +118,19 @@ export function useTMDBNowPlaying() {
 }
 
 export function useTMDBByGenre(genreId: number) {
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "genre", genreId],
     queryFn: async () => {
-      console.log(`[TMDB] Request started: discover/genre/${genreId}`);
-      const data = await fetchMoviesByGenre(genreId);
+      if (!actor) throw new Error("Actor not ready");
+      console.log(`[TMDB] Request started: genre/${genreId} (via backend)`);
+      const results = await fetchMoviesByGenreViaBackend(actor, genreId);
       console.log(
-        `[TMDB] State updated: genre/${genreId} — ${data.results.length} movies loaded`,
+        `[TMDB] State updated: genre/${genreId} — ${results.length} movies loaded`,
       );
-      return data.results;
+      return results;
     },
+    enabled: !!actor,
     staleTime: STALE,
     retry: 2,
     placeholderData: DEBUG_PLACEHOLDER_MOVIES,
@@ -141,20 +138,37 @@ export function useTMDBByGenre(genreId: number) {
 }
 
 export function useTMDBMovieDetail(id: number | null) {
+  const { actor } = useActor();
   return useQuery<TMDBMovieDetail>({
     queryKey: ["tmdb", "movie", id],
-    queryFn: () => fetchMovieDetail(id!),
-    enabled: id !== null,
+    queryFn: async () => {
+      if (!actor) throw new Error("Actor not ready");
+      const raw = await (actor as any).getMovieDetails(BigInt(id!));
+      console.log("[Frontend] Raw movie details:", raw);
+      const data = JSON.parse(
+        typeof raw === "string" ? raw || "{}" : "{}",
+      ) as TMDBMovieDetail;
+      return data;
+    },
+    enabled: id !== null && !!actor,
     staleTime: STALE,
   });
 }
 
 export function useTMDBVideos(id: number | null) {
+  const { actor } = useActor();
   return useQuery<TMDBVideo | null>({
     queryKey: ["tmdb", "videos", id],
     queryFn: async () => {
-      const data = await fetchMovieVideos(id!);
-      const youtubeVideos = data.results.filter((v) => v.site === "YouTube");
+      if (!actor) throw new Error("Actor not ready");
+      const raw = await (actor as any).getMovieVideos(BigInt(id!));
+      console.log("[Frontend] Raw movie videos:", raw);
+      const parsed = JSON.parse(
+        typeof raw === "string" ? raw || "{}" : "{}",
+      ) as { results?: TMDBVideo[] };
+      const youtubeVideos = (
+        Array.isArray(parsed.results) ? parsed.results : []
+      ).filter((v) => v.site === "YouTube");
       const trailer =
         youtubeVideos.find((v) => v.type === "Trailer" && v.official) ??
         youtubeVideos.find((v) => v.type === "Trailer") ??
@@ -163,19 +177,23 @@ export function useTMDBVideos(id: number | null) {
         null;
       return trailer;
     },
-    enabled: id !== null,
+    enabled: id !== null && !!actor,
     staleTime: STALE,
   });
 }
 
 export function useTMDBSimilar(id: number | null) {
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "similar", id],
     queryFn: async () => {
-      const data = await fetchSimilarMovies(id!);
-      return data.results;
+      if (!actor) throw new Error("Actor not ready");
+      const raw = await (actor as any).getSimilarMovies(BigInt(id!));
+      console.log("[Frontend] Raw similar movies:", raw);
+      const data = JSON.parse(typeof raw === "string" ? raw || "{}" : "{}");
+      return Array.isArray(data.results) ? data.results : [];
     },
-    enabled: id !== null,
+    enabled: id !== null && !!actor,
     staleTime: STALE,
   });
 }

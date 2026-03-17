@@ -129,6 +129,7 @@ export interface backendInterface {
     saveSubscription(subscription: Subscription): Promise<void>;
     searchMoviesByTitle(title: string): Promise<Array<Movie>>;
     setStripeConfiguration(config: StripeConfiguration): Promise<void>;
+    getMoviesByGenre(genreId: bigint): Promise<string>;
     getNowPlaying(): Promise<string>;
     getPopular(): Promise<string>;
     getTopRated(): Promise<string>;

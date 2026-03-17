@@ -730,83 +730,159 @@ actor {
 
   // ─── TMDB Proxy Methods ───────────────────────────────────────────────────
   // API key stored securely in backend — never exposed to the browser.
-  let tmdbApiKey = "fadb0b01b6573c9e09695a7b0498aa71";
+  let tmdbApiKey = "d56aeba5c5eec755e3dd0c84cf8b88f5";
   let tmdbBase = "https://api.themoviedb.org/3";
 
-  // In-memory cache: endpoint -> (timestamp, bodyText)
+  // In-memory cache: endpoint path -> (timestamp, bodyText)
   let tmdbCache = Map.empty<Text, (Int, Text)>();
   let tmdbCacheTTL : Int = 30 * 60 * 1_000_000_000; // 30 minutes in nanoseconds
 
-  // Fetch from TMDB with:
-  //   1. Fresh-cache short-circuit (30 min TTL)
-  //   2. HTTP outcall with UTF-8 decode
-  //   3. On any failure, fall back to stale cache or "{}"
-  func tmdbCachedFetch(path : Text) : async Text {
+  // Per-genreId cache: genreId -> (timestamp, bodyText)
+  let genreCache = Map.empty<Nat, (Int, Text)>();
+
+  // Common fetch utility: cache check → HTTP outcall with proper headers →
+  // UTF-8 decode → retry once on failure → fallback to stale cache or "{}".
+  func tmdbFetch(path : Text) : async Text {
     let now = Time.now();
 
-    // Check fresh cache first
+    // Return fresh cache if available
     switch (tmdbCache.get(path)) {
       case (?(ts, body)) {
         if (now - ts < tmdbCacheTTL) {
-          Debug.print("[TMDB Backend] cache hit: " # path);
+          Debug.print("[TMDB] cache hit: " # path);
           return body;
         };
       };
       case (null) {};
     };
 
-    Debug.print("[TMDB Backend] request start: " # path);
+    Debug.print("[TMDB] request start: " # path);
 
-    let url = tmdbBase # path # (if (path.contains(#char '?')) { "&" } else { "?" }) # "api_key=" # tmdbApiKey;
+    let sep = if (path.contains(#char '?')) { "&" } else { "?" };
+    let url = tmdbBase # path # sep # "api_key=" # tmdbApiKey;
 
-    // Perform the HTTP outcall; on failure return stale cache or "{}"
-    let bodyText : Text = try {
+    // First attempt
+    let result : Text = try {
       let raw = await OutCall.httpGetRequest(url, [], transform);
-      Debug.print("[TMDB Backend] response received: " # path);
-      // Validate we got actual JSON content (not empty / error string)
+      Debug.print("[TMDB] response received: " # path);
       if (raw == "" or raw == "{}") {
-        Debug.print("[TMDB Backend] empty response for: " # path);
-        // Fall through to stale cache below
         switch (tmdbCache.get(path)) {
-          case (?(_, stale)) {
-            Debug.print("[TMDB Backend] returning stale cache for: " # path);
-            return stale;
-          };
+          case (?(_, stale)) { return stale };
           case (null) { return "{}" };
         };
       };
       raw;
     } catch (_) {
-      Debug.print("[TMDB Backend] request failed for: " # path);
-      // Return stale cached data if available, otherwise empty JSON
-      switch (tmdbCache.get(path)) {
-        case (?(_, stale)) {
-          Debug.print("[TMDB Backend] returning stale cache after failure: " # path);
-          return stale;
+      Debug.print("[TMDB] request failed, retrying: " # path);
+      // Retry once
+      try {
+        let raw2 = await OutCall.httpGetRequest(url, [], transform);
+        Debug.print("[TMDB] response received (retry): " # path);
+        if (raw2 == "" or raw2 == "{}") {
+          switch (tmdbCache.get(path)) {
+            case (?(_, stale)) { return stale };
+            case (null) { return "{}" };
+          };
         };
-        case (null) { return "{}" };
+        raw2;
+      } catch (_) {
+        Debug.print("[TMDB] request failed again, using fallback: " # path);
+        switch (tmdbCache.get(path)) {
+          case (?(_, stale)) { return stale };
+          case (null) { return "{}" };
+        };
       };
     };
 
-    // Update cache with fresh decoded text
-    tmdbCache.add(path, (now, bodyText));
-    bodyText;
+    // Update cache and return
+    tmdbCache.add(path, (now, result));
+    result;
   };
 
   public func getTrending() : async Text {
-    await tmdbCachedFetch("/trending/movie/week");
+    await tmdbFetch("/trending/movie/day");
   };
 
   public func getPopular() : async Text {
-    await tmdbCachedFetch("/movie/popular");
+    await tmdbFetch("/movie/popular");
   };
 
   public func getTopRated() : async Text {
-    await tmdbCachedFetch("/movie/top_rated");
+    await tmdbFetch("/movie/top_rated");
   };
 
   public func getNowPlaying() : async Text {
-    await tmdbCachedFetch("/movie/now_playing");
+    await tmdbFetch("/movie/now_playing");
+  };
+
+  public func getMovieDetails(id : Nat) : async Text {
+    await tmdbFetch("/movie/" # id.toText());
+  };
+
+  public func getMovieVideos(id : Nat) : async Text {
+    await tmdbFetch("/movie/" # id.toText() # "/videos");
+  };
+
+  public func getSimilarMovies(id : Nat) : async Text {
+    await tmdbFetch("/movie/" # id.toText() # "/similar");
+  };
+
+  // Genre-based discovery — uses a per-genreId in-memory cache
+  public func getMoviesByGenre(genreId : Nat) : async Text {
+    let now = Time.now();
+
+    // Return fresh cache if available
+    switch (genreCache.get(genreId)) {
+      case (?(ts, body)) {
+        if (now - ts < tmdbCacheTTL) {
+          Debug.print("[TMDB] genre cache hit: " # genreId.toText());
+          return body;
+        };
+      };
+      case (null) {};
+    };
+
+    Debug.print("[TMDB] genre request start: " # genreId.toText());
+
+    let url = tmdbBase # "/discover/movie?with_genres=" # genreId.toText() # "&sort_by=popularity.desc&api_key=" # tmdbApiKey;
+
+    let fetchOnce = func() : async Text {
+      let raw = await OutCall.httpGetRequest(url, [], transform);
+      Debug.print("[TMDB] genre response received: " # genreId.toText());
+      raw;
+    };
+
+    let result : Text = try {
+      let raw = await fetchOnce();
+      if (raw == "" or raw == "{}") {
+        switch (genreCache.get(genreId)) {
+          case (?(_, stale)) { return stale };
+          case (null) { return "{}" };
+        };
+      };
+      raw;
+    } catch (_) {
+      Debug.print("[TMDB] genre request failed, retrying: " # genreId.toText());
+      try {
+        let raw2 = await fetchOnce();
+        if (raw2 == "" or raw2 == "{}") {
+          switch (genreCache.get(genreId)) {
+            case (?(_, stale)) { return stale };
+            case (null) { return "{}" };
+          };
+        };
+        raw2;
+      } catch (_) {
+        Debug.print("[TMDB] genre request failed again, using fallback: " # genreId.toText());
+        switch (genreCache.get(genreId)) {
+          case (?(_, stale)) { return stale };
+          case (null) { return "{}" };
+        };
+      };
+    };
+
+    genreCache.add(genreId, (now, result));
+    result;
   };
 
 };
