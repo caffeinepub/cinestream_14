@@ -1,24 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { fetchSearchMovies, fetchUpcomingMovies } from "../services/tmdb";
+import { fetchSearchMovies } from "../services/tmdb";
 import {
   fetchMoviesByGenreViaBackend,
   fetchNowPlayingViaBackend,
   fetchPopularViaBackend,
   fetchTopRatedViaBackend,
   fetchTrendingViaBackend,
+  fetchUpcomingViaBackend,
 } from "../services/tmdbBackend";
-import { DEBUG_PLACEHOLDER_MOVIES } from "../services/tmdbDebugMovies";
 import type { TMDBMovie, TMDBMovieDetail, TMDBVideo } from "../types/tmdb";
 import { useActor } from "./useActor";
 
 const STALE = 5 * 60 * 1000;
 
-/**
- * The 4 main row hooks now route through the Motoko backend (HTTP outcalls)
- * so the browser never calls TMDB directly.
- * This fixes loading failures on Indian ISP networks.
- */
+// All TMDB list endpoints route through the Motoko backend (HTTP outcalls)
+// so the browser never calls TMDB directly. This fixes ISP blocks.
 
 export function useTMDBTrending() {
   const { actor } = useActor();
@@ -26,17 +23,11 @@ export function useTMDBTrending() {
     queryKey: ["tmdb", "trending"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      console.log("[TMDB] Request started: trending/week (via backend)");
-      const results = await fetchTrendingViaBackend(actor);
-      console.log(
-        `[TMDB] State updated: trending — ${results.length} movies loaded`,
-      );
-      return results;
+      return fetchTrendingViaBackend(actor);
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 2,
-    placeholderData: DEBUG_PLACEHOLDER_MOVIES,
+    retry: 1,
   });
 }
 
@@ -46,17 +37,11 @@ export function useTMDBPopular() {
     queryKey: ["tmdb", "popular"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      console.log("[TMDB] Request started: movie/popular (via backend)");
-      const results = await fetchPopularViaBackend(actor);
-      console.log(
-        `[TMDB] State updated: popular — ${results.length} movies loaded`,
-      );
-      return results;
+      return fetchPopularViaBackend(actor);
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 2,
-    placeholderData: DEBUG_PLACEHOLDER_MOVIES,
+    retry: 1,
   });
 }
 
@@ -66,34 +51,25 @@ export function useTMDBTopRated() {
     queryKey: ["tmdb", "top_rated"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      console.log("[TMDB] Request started: movie/top_rated (via backend)");
-      const results = await fetchTopRatedViaBackend(actor);
-      console.log(
-        `[TMDB] State updated: top_rated — ${results.length} movies loaded`,
-      );
-      return results;
+      return fetchTopRatedViaBackend(actor);
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 2,
-    placeholderData: DEBUG_PLACEHOLDER_MOVIES,
+    retry: 1,
   });
 }
 
 export function useTMDBUpcoming() {
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "upcoming"],
     queryFn: async () => {
-      console.log("[TMDB] Request started: movie/upcoming");
-      const data = await fetchUpcomingMovies();
-      console.log(
-        `[TMDB] State updated: upcoming — ${data.results.length} movies loaded`,
-      );
-      return data.results;
+      if (!actor) throw new Error("Actor not ready");
+      return fetchUpcomingViaBackend(actor);
     },
+    enabled: !!actor,
     staleTime: STALE,
-    retry: 2,
-    placeholderData: DEBUG_PLACEHOLDER_MOVIES,
+    retry: 1,
   });
 }
 
@@ -103,17 +79,11 @@ export function useTMDBNowPlaying() {
     queryKey: ["tmdb", "now_playing"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      console.log("[TMDB] Request started: movie/now_playing (via backend)");
-      const results = await fetchNowPlayingViaBackend(actor);
-      console.log(
-        `[TMDB] State updated: now_playing — ${results.length} movies loaded`,
-      );
-      return results;
+      return fetchNowPlayingViaBackend(actor);
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 2,
-    placeholderData: DEBUG_PLACEHOLDER_MOVIES,
+    retry: 1,
   });
 }
 
@@ -123,78 +93,77 @@ export function useTMDBByGenre(genreId: number) {
     queryKey: ["tmdb", "genre", genreId],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
-      console.log(`[TMDB] Request started: genre/${genreId} (via backend)`);
-      const results = await fetchMoviesByGenreViaBackend(actor, genreId);
-      console.log(
-        `[TMDB] State updated: genre/${genreId} — ${results.length} movies loaded`,
-      );
-      return results;
+      return fetchMoviesByGenreViaBackend(actor, genreId);
     },
     enabled: !!actor,
     staleTime: STALE,
-    retry: 2,
-    placeholderData: DEBUG_PLACEHOLDER_MOVIES,
+    retry: 1,
   });
 }
 
 export function useTMDBMovieDetail(id: number | null) {
   const { actor } = useActor();
+  const validId = id !== null && !Number.isNaN(id) && id > 0;
   return useQuery<TMDBMovieDetail>({
     queryKey: ["tmdb", "movie", id],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
+      if (!validId) throw new Error("Invalid movie ID");
       const raw = await (actor as any).getMovieDetails(BigInt(id!));
-      console.log("[Frontend] Raw movie details:", raw);
       const data = JSON.parse(
         typeof raw === "string" ? raw || "{}" : "{}",
       ) as TMDBMovieDetail;
+      if (!data.id) throw new Error("Movie not found");
       return data;
     },
-    enabled: id !== null && !!actor,
+    enabled: validId && !!actor,
     staleTime: STALE,
+    retry: 1,
   });
 }
 
 export function useTMDBVideos(id: number | null) {
   const { actor } = useActor();
+  const validId = id !== null && !Number.isNaN(id) && id > 0;
   return useQuery<TMDBVideo | null>({
     queryKey: ["tmdb", "videos", id],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
       const raw = await (actor as any).getMovieVideos(BigInt(id!));
-      console.log("[Frontend] Raw movie videos:", raw);
       const parsed = JSON.parse(
         typeof raw === "string" ? raw || "{}" : "{}",
       ) as { results?: TMDBVideo[] };
       const youtubeVideos = (
         Array.isArray(parsed.results) ? parsed.results : []
       ).filter((v) => v.site === "YouTube");
-      const trailer =
+      return (
         youtubeVideos.find((v) => v.type === "Trailer" && v.official) ??
         youtubeVideos.find((v) => v.type === "Trailer") ??
         youtubeVideos.find((v) => v.type === "Teaser" && v.official) ??
         youtubeVideos.find((v) => v.type === "Teaser") ??
-        null;
-      return trailer;
+        null
+      );
     },
-    enabled: id !== null && !!actor,
+    enabled: validId && !!actor,
     staleTime: STALE,
+    retry: 1,
   });
 }
 
 export function useTMDBSimilar(id: number | null) {
   const { actor } = useActor();
+  const validId = id !== null && !Number.isNaN(id) && id > 0;
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "similar", id],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not ready");
       const raw = await (actor as any).getSimilarMovies(BigInt(id!));
-      console.log("[Frontend] Raw similar movies:", raw);
       const data = JSON.parse(typeof raw === "string" ? raw || "{}" : "{}");
       return Array.isArray(data.results) ? data.results : [];
     },
-    enabled: id !== null && !!actor,
+    enabled: validId && !!actor,
     staleTime: STALE,
+    retry: 1,
   });
 }
 
@@ -210,9 +179,10 @@ export function useTMDBSearch(query: string) {
     queryKey: ["tmdb", "search", debouncedQuery],
     queryFn: async () => {
       const data = await fetchSearchMovies(debouncedQuery);
-      return data.results;
+      return Array.isArray(data.results) ? data.results : [];
     },
     enabled: debouncedQuery.length >= 2,
     staleTime: STALE,
+    retry: 1,
   });
 }

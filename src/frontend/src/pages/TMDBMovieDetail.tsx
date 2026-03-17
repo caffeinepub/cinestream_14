@@ -27,15 +27,22 @@ import { getReleaseYear, tmdbImage } from "../services/tmdb";
 export default function TMDBMovieDetailPage() {
   const { id } = useParams({ from: "/tmdb/$id" });
   const movieId = Number(id);
+  const isValidId = !Number.isNaN(movieId) && movieId > 0;
+
   const navigate = useNavigate();
 
   const { actor } = useActor();
   const { loginStatus, identity } = useInternetIdentity();
   const isLoggedIn = loginStatus === "success" && !!identity;
 
-  const { data: movie, isLoading } = useTMDBMovieDetail(movieId);
-  const { data: similarMovies, isLoading: isSimilarLoading } =
-    useTMDBSimilar(movieId);
+  const {
+    data: movie,
+    isLoading,
+    isError,
+  } = useTMDBMovieDetail(isValidId ? movieId : null);
+  const { data: similarMovies, isLoading: isSimilarLoading } = useTMDBSimilar(
+    isValidId ? movieId : null,
+  );
 
   const { data: watchlistIds } = useTMDBWatchlistIds();
   const { addToTMDBWatchlist, removeFromTMDBWatchlist } =
@@ -50,7 +57,6 @@ export default function TMDBMovieDetailPage() {
     [recordGenreMutate],
   );
 
-  // Record genre interaction once on page load when movie data is available
   useEffect(() => {
     if (
       isLoggedIn &&
@@ -91,7 +97,6 @@ export default function TMDBMovieDetailPage() {
     setTrailerLoading(true);
     try {
       const raw = await (actor as any).getMovieVideos(BigInt(movieId));
-      console.log("[Frontend] Raw trailer videos:", raw);
       const data = JSON.parse(typeof raw === "string" ? raw || "{}" : "{}");
       const videos: Array<{
         site: string;
@@ -105,17 +110,49 @@ export default function TMDBMovieDetailPage() {
         ) ??
         videos.find((v) => v.site === "YouTube" && v.type === "Trailer") ??
         null;
-      console.log("[TMDB] Selected trailer:", youtubeTrailer?.key ?? "none");
       setTrailerKey(youtubeTrailer?.key ?? null);
       setTrailerOpen(true);
-    } catch (err) {
-      console.error("[TMDB] Failed to fetch trailer:", err);
+    } catch {
       setTrailerKey(null);
       setTrailerOpen(true);
     } finally {
       setTrailerLoading(false);
     }
   };
+
+  // Invalid ID guard
+  if (!isValidId) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground text-lg">No data found.</p>
+        <Button
+          data-ocid="tmdb_detail.button"
+          variant="outline"
+          onClick={() => navigate({ to: "/" })}
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Home
+        </Button>
+      </div>
+    );
+  }
+
+  // Error state
+  if (isError && !isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground text-lg">Movie not found.</p>
+        <Button
+          data-ocid="tmdb_detail.button"
+          variant="outline"
+          onClick={() => navigate({ to: "/" })}
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Home
+        </Button>
+      </div>
+    );
+  }
 
   const backdropUrl = tmdbImage(movie?.backdrop_path ?? null, "w1280");
   const posterUrl = tmdbImage(movie?.poster_path ?? null, "w500");
@@ -129,7 +166,7 @@ export default function TMDBMovieDetailPage() {
       >
         {isLoading ? (
           <Skeleton
-            className="absolute inset-0 skeleton-shimmer bg-transparent"
+            className="absolute inset-0 bg-white/10"
             data-ocid="tmdb_detail.loading_state"
           />
         ) : backdropUrl ? (
@@ -137,6 +174,9 @@ export default function TMDBMovieDetailPage() {
             src={backdropUrl}
             alt={movie?.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
           />
         ) : (
           <div className="w-full h-full bg-secondary" />
@@ -159,8 +199,8 @@ export default function TMDBMovieDetailPage() {
         <div className="absolute bottom-8 left-4 sm:left-8 right-4 sm:right-8 z-10">
           {isLoading ? (
             <>
-              <Skeleton className="h-8 w-64 mb-2 skeleton-shimmer bg-transparent" />
-              <Skeleton className="h-4 w-48 skeleton-shimmer bg-transparent" />
+              <Skeleton className="h-8 w-64 mb-2 bg-white/10" />
+              <Skeleton className="h-4 w-48 bg-white/10" />
             </>
           ) : (
             <>
@@ -183,12 +223,15 @@ export default function TMDBMovieDetailPage() {
           <div className="flex flex-col md:flex-row gap-8">
             <div className="flex-shrink-0 w-full md:w-52">
               {isLoading ? (
-                <Skeleton className="aspect-[2/3] rounded-lg skeleton-shimmer bg-transparent" />
+                <Skeleton className="aspect-[2/3] rounded-lg bg-white/10" />
               ) : posterUrl ? (
                 <img
                   src={posterUrl}
                   alt={movie?.title}
                   className="w-full md:w-52 aspect-[2/3] object-cover rounded-lg shadow-2xl"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
                 />
               ) : (
                 <div className="w-full md:w-52 aspect-[2/3] rounded-lg bg-secondary flex items-center justify-center">
@@ -202,40 +245,42 @@ export default function TMDBMovieDetailPage() {
             <div className="flex-1 min-w-0">
               {isLoading ? (
                 <div className="space-y-3">
-                  <Skeleton className="h-6 w-3/4 skeleton-shimmer bg-transparent" />
-                  <Skeleton className="h-4 w-1/3 skeleton-shimmer bg-transparent" />
-                  <Skeleton className="h-4 w-1/2 skeleton-shimmer bg-transparent" />
-                  <Skeleton className="h-20 w-full skeleton-shimmer bg-transparent" />
+                  <Skeleton className="h-6 w-3/4 bg-white/10" />
+                  <Skeleton className="h-4 w-1/3 bg-white/10" />
+                  <Skeleton className="h-4 w-1/2 bg-white/10" />
+                  <Skeleton className="h-20 w-full bg-white/10" />
                 </div>
-              ) : (
+              ) : movie ? (
                 <>
                   <h2 className="font-display font-bold text-2xl sm:text-3xl text-foreground mb-3">
-                    {movie?.title}
+                    {movie.title}
                   </h2>
 
                   <div className="flex flex-wrap items-center gap-3 mb-4">
-                    {movie?.release_date && (
+                    {movie.release_date && (
                       <span className="text-sm font-semibold text-foreground bg-secondary px-2 py-0.5 rounded">
                         {getReleaseYear(movie.release_date)}
                       </span>
                     )}
-                    {movie?.runtime && (
+                    {movie.runtime && (
                       <span className="text-sm text-muted-foreground">
                         {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
                       </span>
                     )}
-                    <span className="flex items-center gap-1 text-sm font-semibold">
-                      <Star className="w-4 h-4 fill-[#e50914] text-[#e50914]" />
-                      <span className="text-foreground">
-                        {movie?.vote_average.toFixed(1)}
+                    {movie.vote_average != null && (
+                      <span className="flex items-center gap-1 text-sm font-semibold">
+                        <Star className="w-4 h-4 fill-[#e50914] text-[#e50914]" />
+                        <span className="text-foreground">
+                          {movie.vote_average.toFixed(1)}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          / 10
+                        </span>
                       </span>
-                      <span className="text-muted-foreground text-xs">
-                        / 10
-                      </span>
-                    </span>
+                    )}
                   </div>
 
-                  {movie?.genres && movie.genres.length > 0 && (
+                  {movie.genres && movie.genres.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-4">
                       {movie.genres.map((g) => (
                         <Badge
@@ -249,14 +294,14 @@ export default function TMDBMovieDetailPage() {
                   )}
 
                   <p className="text-muted-foreground leading-relaxed text-sm sm:text-base mb-6">
-                    {movie?.overview}
+                    {movie.overview || "No overview available."}
                   </p>
 
                   <div className="flex flex-wrap gap-3">
                     <Button
                       data-ocid="tmdb_detail.primary_button"
                       onClick={handlePlayTrailer}
-                      disabled={trailerLoading}
+                      disabled={trailerLoading || !actor}
                       className="bg-white text-black hover:bg-white/90 font-bold gap-2"
                     >
                       {trailerLoading ? (
@@ -295,6 +340,8 @@ export default function TMDBMovieDetailPage() {
                     </Button>
                   </div>
                 </>
+              ) : (
+                <p className="text-muted-foreground">No data found.</p>
               )}
             </div>
           </div>
@@ -304,7 +351,7 @@ export default function TMDBMovieDetailPage() {
       {/* Similar Movies */}
       {(isSimilarLoading || (similarMovies && similarMovies.length > 0)) && (
         <div className="px-4 sm:px-8 pb-12">
-          <h2 className="font-display font-bold text-xl sm:text-2xl mb-4 px-0">
+          <h2 className="font-display font-bold text-xl sm:text-2xl mb-4">
             Similar Movies
           </h2>
           {isSimilarLoading ? (
@@ -312,8 +359,8 @@ export default function TMDBMovieDetailPage() {
               {Array.from({ length: 6 }).map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton row
                 <div key={i} className="flex-shrink-0 w-36 sm:w-44">
-                  <div className="aspect-[2/3] rounded-md skeleton-shimmer" />
-                  <div className="mt-2 h-3 w-3/4 skeleton-shimmer rounded" />
+                  <div className="aspect-[2/3] rounded-md bg-white/10" />
+                  <div className="mt-2 h-3 w-3/4 bg-white/10 rounded" />
                 </div>
               ))}
             </div>
@@ -333,6 +380,14 @@ export default function TMDBMovieDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {!isSimilarLoading && similarMovies && similarMovies.length === 0 && (
+        <div className="px-4 sm:px-8 pb-12">
+          <p className="text-muted-foreground text-sm">
+            No similar movies found.
+          </p>
         </div>
       )}
 

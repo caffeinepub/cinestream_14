@@ -52,10 +52,8 @@ function writeCache<T>(key: string, data: T): void {
 
 /**
  * Safely parses a backend response that may be a JSON string or already an object.
- * Backend returns Text (JSON string); this handles both cases defensively.
  */
 function safeParseResponse(raw: unknown): Partial<TMDBTrendingResponse> {
-  console.log("[Frontend] Raw response:", raw);
   try {
     if (typeof raw === "string") {
       return JSON.parse(raw || "{}") as TMDBTrendingResponse;
@@ -64,14 +62,12 @@ function safeParseResponse(raw: unknown): Partial<TMDBTrendingResponse> {
       return raw as TMDBTrendingResponse;
     }
     return {};
-  } catch (e) {
-    console.error("[Frontend] JSON parse error:", e);
+  } catch {
     return {};
   }
 }
 
 function safeParseAny(raw: unknown): Record<string, unknown> {
-  console.log("[Frontend] Raw response:", raw);
   try {
     if (typeof raw === "string") {
       return JSON.parse(raw || "{}") as Record<string, unknown>;
@@ -80,8 +76,7 @@ function safeParseAny(raw: unknown): Record<string, unknown> {
       return raw as Record<string, unknown>;
     }
     return {};
-  } catch (e) {
-    console.error("[Frontend] JSON parse error:", e);
+  } catch {
     return {};
   }
 }
@@ -92,7 +87,8 @@ type ListMethod =
   | "getTrending"
   | "getPopular"
   | "getTopRated"
-  | "getNowPlaying";
+  | "getNowPlaying"
+  | "getUpcoming";
 
 async function backendFetchList(
   actor: backendInterface,
@@ -100,38 +96,22 @@ async function backendFetchList(
   cacheKey: string,
 ): Promise<TMDBMovie[]> {
   const cached = readCache<TMDBMovie[]>(cacheKey);
-  if (cached) {
-    console.log(`[TMDB Backend] Cache hit: ${cacheKey}`);
-    return cached;
-  }
-
-  console.log(`[TMDB Backend] Request started: ${cacheKey}`);
-  const start = performance.now();
+  if (cached) return cached;
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = await (actor as any)[method]();
-    const elapsed = Math.round(performance.now() - start);
-    console.log(`[TMDB Backend] Response received: ${cacheKey} | ${elapsed}ms`);
-
     const data = safeParseResponse(raw);
     const results: TMDBMovie[] = Array.isArray(data.results)
       ? data.results
       : [];
-    console.log(
-      `[TMDB Backend] Data parsed: ${cacheKey} — ${results.length} movies`,
-    );
     if (results.length > 0) {
       writeCache(cacheKey, results);
     }
     return results;
   } catch (err) {
-    console.error(`[TMDB Backend] Failed: ${cacheKey}`, err);
     const stale = readStaleCache<TMDBMovie[]>(cacheKey);
-    if (stale) {
-      console.log(`[TMDB Backend] Returning stale cache for: ${cacheKey}`);
-      return stale;
-    }
+    if (stale) return stale;
     throw err;
   }
 }
@@ -160,6 +140,17 @@ export async function fetchNowPlayingViaBackend(
   return backendFetchList(actor, "getNowPlaying", "now_playing");
 }
 
+export async function fetchUpcomingViaBackend(
+  actor: backendInterface,
+): Promise<TMDBMovie[]> {
+  // Falls back to getNowPlaying if getUpcoming isn't available on this backend build
+  try {
+    return await backendFetchList(actor, "getUpcoming", "upcoming");
+  } catch {
+    return backendFetchList(actor, "getNowPlaying", "upcoming_fallback");
+  }
+}
+
 // ── Genre discovery endpoint ──────────────────────────────────────────────────
 
 export async function fetchMoviesByGenreViaBackend(
@@ -168,37 +159,21 @@ export async function fetchMoviesByGenreViaBackend(
 ): Promise<TMDBMovie[]> {
   const cacheKey = `genre_${genreId}`;
   const cached = readCache<TMDBMovie[]>(cacheKey);
-  if (cached) {
-    console.log(`[TMDB Backend] Cache hit: ${cacheKey}`);
-    return cached;
-  }
-
-  console.log(`[TMDB Backend] Request started: ${cacheKey}`);
-  const start = performance.now();
+  if (cached) return cached;
 
   try {
     const raw = await (actor as any).getMoviesByGenre(BigInt(genreId));
-    const elapsed = Math.round(performance.now() - start);
-    console.log(`[TMDB Backend] Response received: ${cacheKey} | ${elapsed}ms`);
-
     const data = safeParseResponse(raw);
     const results: TMDBMovie[] = Array.isArray(data.results)
       ? data.results
       : [];
-    console.log(
-      `[TMDB Backend] Data parsed: ${cacheKey} — ${results.length} movies`,
-    );
     if (results.length > 0) {
       writeCache(cacheKey, results);
     }
     return results;
-  } catch (err) {
-    console.error(`[TMDB Backend] Failed: ${cacheKey}`, err);
+  } catch {
     const stale = readStaleCache<TMDBMovie[]>(cacheKey);
-    if (stale) {
-      console.log(`[TMDB Backend] Returning stale cache for: ${cacheKey}`);
-      return stale;
-    }
+    if (stale) return stale;
     return [];
   }
 }
@@ -212,25 +187,15 @@ async function backendFetchMovie<T>(
   cacheKey: string,
 ): Promise<T> {
   const cached = readCache<T>(cacheKey);
-  if (cached) {
-    console.log(`[TMDB Backend] Cache hit: ${cacheKey}`);
-    return cached;
-  }
-
-  console.log(`[TMDB Backend] Request started: ${cacheKey}`);
-  const start = performance.now();
+  if (cached) return cached;
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = await (actor as any)[method](BigInt(id));
-    const elapsed = Math.round(performance.now() - start);
-    console.log(`[TMDB Backend] Response received: ${cacheKey} | ${elapsed}ms`);
-
     const parsed = safeParseAny(raw) as T;
     writeCache(cacheKey, parsed);
     return parsed;
   } catch (err) {
-    console.error(`[TMDB Backend] Failed: ${cacheKey}`, err);
     const stale = readStaleCache<T>(cacheKey);
     if (stale) return stale;
     throw err;
