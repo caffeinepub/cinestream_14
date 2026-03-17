@@ -726,4 +726,45 @@ actor {
       };
     };
   };
+  // TMDB Proxy Methods
+  // API key stored securely in backend — never exposed to the browser
+  let tmdbApiKey = "fadb0b01b6573c9e09695a7b0498aa71";
+  let tmdbBase = "https://api.themoviedb.org/3";
+
+  // Simple in-memory cache: endpoint -> (timestamp, body)
+  let tmdbCache = Map.empty<Text, (Int, Text)>();
+  let tmdbCacheTTL : Int = 30 * 60 * 1_000_000_000; // 30 minutes in nanoseconds
+
+  func tmdbCachedFetch(path : Text) : async Text {
+    let now = Time.now();
+    switch (tmdbCache.get(path)) {
+      case (?(ts, body)) {
+        if (now - ts < tmdbCacheTTL) {
+          return body;
+        };
+      };
+      case (null) {};
+    };
+    let url = tmdbBase # path # (if (path.contains(#char '?')) { "&" } else { "?" }) # "api_key=" # tmdbApiKey;
+    let body = await OutCall.httpGetRequest(url, [], transform);
+    tmdbCache.add(path, (now, body));
+    body;
+  };
+
+  public func getTrending() : async Text {
+    await tmdbCachedFetch("/trending/movie/week");
+  };
+
+  public func getPopular() : async Text {
+    await tmdbCachedFetch("/movie/popular");
+  };
+
+  public func getTopRated() : async Text {
+    await tmdbCachedFetch("/movie/top_rated");
+  };
+
+  public func getNowPlaying() : async Text {
+    await tmdbCachedFetch("/movie/now_playing");
+  };
+
 };

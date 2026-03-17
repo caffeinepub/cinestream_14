@@ -1,27 +1,30 @@
 # CineStream
 
 ## Current State
-CineStream is a full OTT streaming platform with a Navbar, Home page (movie rows), movie detail pages, admin dashboard, watchlist, subscriptions, and a custom video player. The Navbar has links: Home, Browse, My List (logged in), Admin (admin only). Routes are managed via TanStack Router in App.tsx.
+The frontend calls TMDB API directly from the browser (`https://api.themoviedb.org/3/`) using a frontend env variable `VITE_TMDB_API_KEY`. This works with a VPN but fails on Indian ISP networks due to direct-browser TMDB blocking/CORS.
+
+The backend has an `http-outcalls/outcall.mo` module that already supports HTTP GET requests from Motoko canisters.
 
 ## Requested Changes (Diff)
 
 ### Add
-- New `/music` route and `MusicPage` component
-- `MusicCard` component: thumbnail, song title, artist name, play button (opens audio/preview inline or placeholder)
-- Four music category sections on MusicPage: Trending Songs, Bollywood Hits, LoFi Beats, Punjabi Songs
-- Each category shows a horizontal scroll row of `MusicCard` items (static curated mock data, ~8 cards per category)
-- "Music" nav link in the Navbar (desktop nav + mobile menu)
-- Spotify-inspired dark UI: deep black/dark-gray backgrounds, green accent for play buttons, rounded cards, album-art style thumbnails
+- `getTrending()`, `getPopular()`, `getTopRated()`, `getNowPlaying()` Motoko actor methods that use HTTP outcalls to fetch from TMDB and return raw JSON as `Text`
+- TMDB API key hardcoded in backend (never exposed to browser)
+- 30-minute in-memory cache in the backend per endpoint
+- `tmdbBackend.ts` frontend service that calls the actor methods and parses the JSON response
 
 ### Modify
-- `Navbar.tsx`: add Music link (desktop + mobile)
-- `App.tsx`: register `/music` route
+- `main.mo` — add 4 TMDB proxy public methods + cache state
+- `backend.d.ts` — add type signatures for the 4 new methods
+- `useTMDB.ts` — replace direct TMDB fetch calls with actor-based calls for the 4 proxied endpoints
+- `tmdb.ts` — keep helper functions (image URLs, search, detail, videos) but mark the 4 proxied functions as deprecated in favor of actor calls
 
 ### Remove
-- Nothing removed
+- `VITE_TMDB_API_KEY` usage from the 4 main row fetch functions (trending, popular, top_rated, now_playing)
 
 ## Implementation Plan
-1. Create `src/frontend/src/pages/Music.tsx` — MusicPage with 4 category sections, each containing a horizontal scroll row of MusicCard components, using static mock song data
-2. Create `src/frontend/src/components/MusicCard.tsx` — card with thumbnail (colored gradient placeholder or image), song title, artist name, play/pause toggle button with green accent
-3. Update `Navbar.tsx` — add Music nav link in desktop nav and mobile menu
-4. Update `App.tsx` — import MusicPage, create musicRoute at `/music`, add to routeTree
+1. Add TMDB cache state and 4 proxy methods to `main.mo` using `OutCall.httpGetRequest`
+2. Update `backend.d.ts` with `getTrending()`, `getPopular()`, `getTopRated()`, `getNowPlaying()` returning `Promise<string>`
+3. Create `tmdbBackend.ts` — actor-based fetch functions that call the 4 new methods, parse JSON, cache in localStorage
+4. Update `useTMDB.ts` — swap `fetchTrendingMovies`, `fetchPopularMovies`, `fetchTopRatedMovies`, `fetchNowPlayingMovies` to use actor methods
+5. Validate and deploy

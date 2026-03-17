@@ -1,192 +1,71 @@
+import { useCallback, useEffect, useState } from "react";
 import MusicCard from "../components/MusicCard";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
+import {
+  type YouTubeVideo,
+  fetchBollywoodSongs,
+  fetchLofiBeats,
+  fetchPunjabiSongs,
+  fetchTrendingSongs,
+} from "../services/youtubeMusic";
 
-interface Song {
-  title: string;
-  artist: string;
-  gradient: string;
+interface CategoryState {
+  videos: YouTubeVideo[];
+  loading: boolean;
+  error: string | null;
 }
 
-const TRENDING_SONGS: Song[] = [
-  {
-    title: "Kesariya",
-    artist: "Arijit Singh",
-    gradient: "linear-gradient(135deg, #f97316 0%, #ef4444 100%)",
-  },
-  {
-    title: "Raataan Lambiyan",
-    artist: "Jubin Nautiyal",
-    gradient: "linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)",
-  },
-  {
-    title: "Tum Hi Ho",
-    artist: "Arijit Singh",
-    gradient: "linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)",
-  },
-  {
-    title: "Tera Ban Jaunga",
-    artist: "Akhil Sachdeva",
-    gradient: "linear-gradient(135deg, #14b8a6 0%, #0ea5e9 100%)",
-  },
-  {
-    title: "Bekhayali",
-    artist: "Sachet Tandon",
-    gradient: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
-  },
-  {
-    title: "Ik Vaari Aa",
-    artist: "Arijit Singh",
-    gradient: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
-  },
-  {
-    title: "Phir Bhi Tumko Chaahunga",
-    artist: "Arijit Singh",
-    gradient: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-  },
-  {
-    title: "Hawayein",
-    artist: "Arijit Singh",
-    gradient: "linear-gradient(135deg, #e879f9 0%, #a21caf 100%)",
-  },
-];
+const SKELETON_KEYS = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-const BOLLYWOOD_HITS: Song[] = [
-  {
-    title: "Chaiyya Chaiyya",
-    artist: "Sukhwinder Singh",
-    gradient: "linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)",
-  },
-  {
-    title: "Kala Chashma",
-    artist: "Badshah",
-    gradient: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
-  },
-  {
-    title: "Badtameez Dil",
-    artist: "Udit Narayan",
-    gradient: "linear-gradient(135deg, #f97316 0%, #b45309 100%)",
-  },
-  {
-    title: "Galliyan",
-    artist: "Ankit Tiwari",
-    gradient: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
-  },
-  {
-    title: "Jai Ho",
-    artist: "A.R. Rahman",
-    gradient: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
-  },
-  {
-    title: "Senorita",
-    artist: "Shaan",
-    gradient: "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
-  },
-  {
-    title: "Nagada Sang Dhol",
-    artist: "Shreya Ghoshal",
-    gradient: "linear-gradient(135deg, #84cc16 0%, #4d7c0f 100%)",
-  },
-  {
-    title: "Desi Girl",
-    artist: "Shankar-Ehsaan-Loy",
-    gradient: "linear-gradient(135deg, #06b6d4 0%, #0e7490 100%)",
-  },
-];
-
-const LOFI_BEATS: Song[] = [
-  {
-    title: "Midnight Lofi",
-    artist: "ChillHop Music",
-    gradient: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
-  },
-  {
-    title: "Rainy Café",
-    artist: "LoFi Girl",
-    gradient: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
-  },
-  {
-    title: "Study Vibes",
-    artist: "Beats by Ambulo",
-    gradient: "linear-gradient(135deg, #2d1b69 0%, #11998e 100%)",
-  },
-  {
-    title: "Chill Wave",
-    artist: "Lofi Dreamer",
-    gradient: "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%)",
-  },
-  {
-    title: "Late Night Drive",
-    artist: "Nujabes",
-    gradient: "linear-gradient(135deg, #16213e 0%, #0f3460 100%)",
-  },
-  {
-    title: "Lo-Fi Daydream",
-    artist: "ChilledCow",
-    gradient: "linear-gradient(135deg, #192734 0%, #2e4482 100%)",
-  },
-  {
-    title: "Coffee Shop Jazz",
-    artist: "Café Music BGM",
-    gradient: "linear-gradient(135deg, #3a1c71 0%, #d76d77 100%)",
-  },
-  {
-    title: "Bedroom Pop",
-    artist: "Rex Orange County",
-    gradient: "linear-gradient(135deg, #614385 0%, #516395 100%)",
-  },
-];
-
-const PUNJABI_SONGS: Song[] = [
-  {
-    title: "Lover",
-    artist: "Diljit Dosanjh",
-    gradient: "linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)",
-  },
-  {
-    title: "Lahore",
-    artist: "Guru Randhawa",
-    gradient: "linear-gradient(135deg, #10b981 0%, #f59e0b 100%)",
-  },
-  {
-    title: "Mundian To Bach Ke",
-    artist: "Panjabi MC",
-    gradient: "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)",
-  },
-  {
-    title: "Proper Patola",
-    artist: "Badshah",
-    gradient: "linear-gradient(135deg, #f97316 0%, #fbbf24 100%)",
-  },
-  {
-    title: "Laal Ghagra",
-    artist: "Guru Randhawa",
-    gradient: "linear-gradient(135deg, #dc2626 0%, #ea580c 100%)",
-  },
-  {
-    title: "Yeah Baby",
-    artist: "Garry Sandhu",
-    gradient: "linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)",
-  },
-  {
-    title: "Patiala Peg",
-    artist: "Diljit Dosanjh",
-    gradient: "linear-gradient(135deg, #d97706 0%, #65a30d 100%)",
-  },
-  {
-    title: "Brown Munde",
-    artist: "AP Dhillon",
-    gradient: "linear-gradient(135deg, #0f172a 0%, #7c3aed 100%)",
-  },
-];
+function SkeletonRow() {
+  return (
+    <div className="flex gap-4 px-4 sm:px-8 overflow-hidden">
+      {SKELETON_KEYS.map((k) => (
+        <div key={k} className="flex-shrink-0 w-44 sm:w-48">
+          <div className="w-full aspect-video rounded-xl bg-white/10 animate-pulse mb-3" />
+          <div className="h-3 w-32 bg-white/10 animate-pulse rounded mb-1.5" />
+          <div className="h-2.5 w-20 bg-white/10 animate-pulse rounded" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function MusicRow({
-  songs,
+  state,
+  onPlay,
+  onRetry,
   sectionOcid,
 }: {
-  songs: Song[];
+  state: CategoryState;
+  onPlay: (video: YouTubeVideo) => void;
+  onRetry: () => void;
   sectionOcid: string;
 }) {
+  if (state.loading) return <SkeletonRow />;
+
+  if (state.error) {
+    return (
+      <div
+        data-ocid={`${sectionOcid}.error_state`}
+        className="px-4 sm:px-8 py-6"
+      >
+        <p className="text-zinc-400 text-sm mb-3">
+          Failed to load. Please try again.
+        </p>
+        <button
+          type="button"
+          data-ocid={`${sectionOcid}.button`}
+          onClick={onRetry}
+          className="text-sm px-4 py-1.5 rounded-full border border-white/20 text-white hover:bg-white/10 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       data-ocid={sectionOcid}
@@ -198,13 +77,12 @@ function MusicRow({
       }}
     >
       <div className="flex gap-4 px-4 sm:px-8" style={{ width: "max-content" }}>
-        {songs.map((song, i) => (
+        {state.videos.map((video, i) => (
           <MusicCard
-            key={song.title}
-            title={song.title}
-            artist={song.artist}
-            gradient={song.gradient}
+            key={video.videoId}
+            video={video}
             index={i}
+            onPlay={onPlay}
           />
         ))}
       </div>
@@ -212,7 +90,141 @@ function MusicRow({
   );
 }
 
+function YouTubeMusicPlayer({
+  video,
+  onClose,
+}: {
+  video: YouTubeVideo;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      data-ocid="music.modal"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.92)" }}
+    >
+      {/* Backdrop */}
+      <button
+        type="button"
+        className="absolute inset-0 w-full h-full border-0 bg-transparent cursor-default"
+        onClick={onClose}
+        aria-label="Close modal"
+      />
+
+      <div className="relative z-10 w-full max-w-3xl">
+        {/* Close button */}
+        <button
+          type="button"
+          data-ocid="music.modal.close_button"
+          onClick={onClose}
+          className="absolute -top-10 right-0 text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5 text-sm"
+          aria-label="Close player"
+        >
+          <span>Close</span>
+          <span className="text-lg leading-none">×</span>
+        </button>
+
+        {/* iframe */}
+        <div
+          className="rounded-xl overflow-hidden shadow-2xl"
+          style={{ aspectRatio: "16/9" }}
+        >
+          <iframe
+            src={`https://www.youtube.com/embed/${video.videoId}?autoplay=1`}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            className="w-full h-full border-0"
+            title={video.title}
+          />
+        </div>
+
+        {/* Video info */}
+        <div className="mt-4 px-1">
+          <h3 className="text-white font-semibold text-base leading-snug line-clamp-2">
+            {video.title}
+          </h3>
+          <p className="text-zinc-400 text-sm mt-1">{video.channelTitle}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MusicPage() {
+  const [trending, setTrending] = useState<CategoryState>({
+    videos: [],
+    loading: true,
+    error: null,
+  });
+  const [bollywood, setBollywood] = useState<CategoryState>({
+    videos: [],
+    loading: true,
+    error: null,
+  });
+  const [lofi, setLofi] = useState<CategoryState>({
+    videos: [],
+    loading: true,
+    error: null,
+  });
+  const [punjabi, setPunjabi] = useState<CategoryState>({
+    videos: [],
+    loading: true,
+    error: null,
+  });
+
+  const [activeVideo, setActiveVideo] = useState<YouTubeVideo | null>(null);
+
+  const loadTrending = useCallback(() => {
+    setTrending((s) => ({ ...s, loading: true, error: null }));
+    fetchTrendingSongs()
+      .then((videos) => setTrending({ videos, loading: false, error: null }))
+      .catch((err) =>
+        setTrending({ videos: [], loading: false, error: String(err) }),
+      );
+  }, []);
+
+  const loadBollywood = useCallback(() => {
+    setBollywood((s) => ({ ...s, loading: true, error: null }));
+    fetchBollywoodSongs()
+      .then((videos) => setBollywood({ videos, loading: false, error: null }))
+      .catch((err) =>
+        setBollywood({ videos: [], loading: false, error: String(err) }),
+      );
+  }, []);
+
+  const loadLofi = useCallback(() => {
+    setLofi((s) => ({ ...s, loading: true, error: null }));
+    fetchLofiBeats()
+      .then((videos) => setLofi({ videos, loading: false, error: null }))
+      .catch((err) =>
+        setLofi({ videos: [], loading: false, error: String(err) }),
+      );
+  }, []);
+
+  const loadPunjabi = useCallback(() => {
+    setPunjabi((s) => ({ ...s, loading: true, error: null }));
+    fetchPunjabiSongs()
+      .then((videos) => setPunjabi({ videos, loading: false, error: null }))
+      .catch((err) =>
+        setPunjabi({ videos: [], loading: false, error: String(err) }),
+      );
+  }, []);
+
+  useEffect(() => {
+    loadTrending();
+    loadBollywood();
+    loadLofi();
+    loadPunjabi();
+  }, [loadTrending, loadBollywood, loadLofi, loadPunjabi]);
+
   return (
     <div
       data-ocid="music.page"
@@ -243,10 +255,8 @@ export default function MusicPage() {
             />
           </div>
           <p className="text-zinc-400 text-base sm:text-lg max-w-xl">
-            Your favorite tracks, all in one place
+            Your favorite tracks, powered by YouTube
           </p>
-
-          {/* Decorative green accent line */}
           <div
             className="mt-5 h-0.5 w-24 rounded-full"
             style={{
@@ -255,35 +265,42 @@ export default function MusicPage() {
           />
         </div>
 
-        {/* Trending Songs */}
         <section className="mb-10">
           <SectionHeader title="Trending Songs" label="🔥 HOT" />
           <MusicRow
-            songs={TRENDING_SONGS}
+            state={trending}
+            onPlay={setActiveVideo}
+            onRetry={loadTrending}
             sectionOcid="music.trending_songs.section"
           />
         </section>
 
-        {/* Bollywood Hits */}
         <section className="mb-10">
           <SectionHeader title="Bollywood Hits" label="🎬 FILMS" />
           <MusicRow
-            songs={BOLLYWOOD_HITS}
+            state={bollywood}
+            onPlay={setActiveVideo}
+            onRetry={loadBollywood}
             sectionOcid="music.bollywood_hits.section"
           />
         </section>
 
-        {/* LoFi Beats */}
         <section className="mb-10">
           <SectionHeader title="LoFi Beats" label="🎧 CHILL" />
-          <MusicRow songs={LOFI_BEATS} sectionOcid="music.lofi_beats.section" />
+          <MusicRow
+            state={lofi}
+            onPlay={setActiveVideo}
+            onRetry={loadLofi}
+            sectionOcid="music.lofi_beats.section"
+          />
         </section>
 
-        {/* Punjabi Songs */}
         <section className="mb-10">
           <SectionHeader title="Punjabi Songs" label="🎤 BHANGRA" />
           <MusicRow
-            songs={PUNJABI_SONGS}
+            state={punjabi}
+            onPlay={setActiveVideo}
+            onRetry={loadPunjabi}
             sectionOcid="music.punjabi_songs.section"
           />
         </section>
@@ -300,6 +317,13 @@ export default function MusicPage() {
           caffeine.ai
         </a>
       </footer>
+
+      {activeVideo && (
+        <YouTubeMusicPlayer
+          video={activeVideo}
+          onClose={() => setActiveVideo(null)}
+        />
+      )}
     </div>
   );
 }

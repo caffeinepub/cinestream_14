@@ -4,43 +4,42 @@ import {
   fetchMovieDetail,
   fetchMovieVideos,
   fetchMoviesByGenre,
-  fetchNowPlayingMovies,
-  fetchPopularMovies,
   fetchSearchMovies,
   fetchSimilarMovies,
-  fetchTopRatedMovies,
-  fetchTrendingMovies,
   fetchUpcomingMovies,
 } from "../services/tmdb";
+import {
+  fetchNowPlayingViaBackend,
+  fetchPopularViaBackend,
+  fetchTopRatedViaBackend,
+  fetchTrendingViaBackend,
+} from "../services/tmdbBackend";
 import { DEBUG_PLACEHOLDER_MOVIES } from "../services/tmdbDebugMovies";
 import type { TMDBMovie, TMDBMovieDetail, TMDBVideo } from "../types/tmdb";
+import { useActor } from "./useActor";
 
 const STALE = 5 * 60 * 1000;
 
 /**
- * placeholderData: DEBUG_PLACEHOLDER_MOVIES
- *
- * How this works:
- * 1. On first render, React Query instantly returns the 5 hardcoded debug movies
- *    so the UI renders immediately (isLoading = false, data = debug movies).
- * 2. In the background, the real TMDB API fetch fires.
- * 3. If the API succeeds → real movies replace the debug placeholders automatically.
- * 4. If the API fails → isError = true, error UI + Retry button shown per row.
- *
- * This proves: if the debug cards render → UI is fine → issue is API connectivity.
+ * The 4 main row hooks now route through the Motoko backend (HTTP outcalls)
+ * so the browser never calls TMDB directly.
+ * This fixes loading failures on Indian ISP networks.
  */
 
 export function useTMDBTrending() {
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "trending"],
     queryFn: async () => {
-      console.log("[TMDB] Request started: trending/week");
-      const data = await fetchTrendingMovies();
+      if (!actor) throw new Error("Actor not ready");
+      console.log("[TMDB] Request started: trending/week (via backend)");
+      const results = await fetchTrendingViaBackend(actor);
       console.log(
-        `[TMDB] State updated: trending — ${data.results.length} movies loaded`,
+        `[TMDB] State updated: trending — ${results.length} movies loaded`,
       );
-      return data.results;
+      return results;
     },
+    enabled: !!actor,
     staleTime: STALE,
     retry: 2,
     placeholderData: DEBUG_PLACEHOLDER_MOVIES,
@@ -48,16 +47,19 @@ export function useTMDBTrending() {
 }
 
 export function useTMDBPopular() {
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "popular"],
     queryFn: async () => {
-      console.log("[TMDB] Request started: movie/popular");
-      const data = await fetchPopularMovies();
+      if (!actor) throw new Error("Actor not ready");
+      console.log("[TMDB] Request started: movie/popular (via backend)");
+      const results = await fetchPopularViaBackend(actor);
       console.log(
-        `[TMDB] State updated: popular — ${data.results.length} movies loaded`,
+        `[TMDB] State updated: popular — ${results.length} movies loaded`,
       );
-      return data.results;
+      return results;
     },
+    enabled: !!actor,
     staleTime: STALE,
     retry: 2,
     placeholderData: DEBUG_PLACEHOLDER_MOVIES,
@@ -65,16 +67,19 @@ export function useTMDBPopular() {
 }
 
 export function useTMDBTopRated() {
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "top_rated"],
     queryFn: async () => {
-      console.log("[TMDB] Request started: movie/top_rated");
-      const data = await fetchTopRatedMovies();
+      if (!actor) throw new Error("Actor not ready");
+      console.log("[TMDB] Request started: movie/top_rated (via backend)");
+      const results = await fetchTopRatedViaBackend(actor);
       console.log(
-        `[TMDB] State updated: top_rated — ${data.results.length} movies loaded`,
+        `[TMDB] State updated: top_rated — ${results.length} movies loaded`,
       );
-      return data.results;
+      return results;
     },
+    enabled: !!actor,
     staleTime: STALE,
     retry: 2,
     placeholderData: DEBUG_PLACEHOLDER_MOVIES,
@@ -99,16 +104,19 @@ export function useTMDBUpcoming() {
 }
 
 export function useTMDBNowPlaying() {
+  const { actor } = useActor();
   return useQuery<TMDBMovie[]>({
     queryKey: ["tmdb", "now_playing"],
     queryFn: async () => {
-      console.log("[TMDB] Request started: movie/now_playing");
-      const data = await fetchNowPlayingMovies();
+      if (!actor) throw new Error("Actor not ready");
+      console.log("[TMDB] Request started: movie/now_playing (via backend)");
+      const results = await fetchNowPlayingViaBackend(actor);
       console.log(
-        `[TMDB] State updated: now_playing — ${data.results.length} movies loaded`,
+        `[TMDB] State updated: now_playing — ${results.length} movies loaded`,
       );
-      return data.results;
+      return results;
     },
+    enabled: !!actor,
     staleTime: STALE,
     retry: 2,
     placeholderData: DEBUG_PLACEHOLDER_MOVIES,
