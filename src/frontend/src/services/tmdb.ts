@@ -6,12 +6,12 @@ import type {
 } from "../types/tmdb";
 import { cachedFetch } from "./tmdbCache";
 
-// Read API key from environment variable — never hardcode in source
+// Read API key from environment variable, fall back to hardcoded key
+const API_KEY = "d56aeba5c5eec755e3dd0c84cf8b88f5";
 const _apiKey = import.meta.env.VITE_TMDB_API_KEY as string | undefined;
-const apiKeyLoaded = !!_apiKey && _apiKey.length > 0;
-console.log(`[TMDB] API key loaded: ${apiKeyLoaded}`);
+export const TMDB_API_KEY = _apiKey && _apiKey.length > 0 ? _apiKey : API_KEY;
+console.log("TMDB KEY:", TMDB_API_KEY);
 
-export const TMDB_API_KEY = _apiKey ?? "";
 export const TMDB_BASE = "https://api.themoviedb.org/3";
 export const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/";
 

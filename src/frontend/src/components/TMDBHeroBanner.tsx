@@ -7,7 +7,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cachedFetch } from "../services/tmdbCache";
 
-const API_KEY = "fadb0b01b6573c9e09695a7b0498aa71";
+const API_KEY =
+  (import.meta.env.VITE_TMDB_API_KEY as string | undefined) ||
+  "d56aeba5c5eec755e3dd0c84cf8b88f5";
+console.log("TMDB KEY:", API_KEY);
 
 interface TMDBMovie {
   id: number;
@@ -37,6 +40,9 @@ export default function TMDBHeroBanner() {
         const data = await cachedFetch<{ results: { id: number }[] }>(
           trendingUrl,
         );
+        if (!data?.results) {
+          return;
+        }
         const top5 = data.results.slice(0, 5);
         const detailed = await Promise.all(
           top5.map((m) =>
@@ -46,8 +52,8 @@ export default function TMDBHeroBanner() {
           ),
         );
         setMovies(detailed);
-      } catch {
-        // silently fail
+      } catch (err) {
+        console.error("[TMDB] Failed to fetch hero banner movies:", err);
       } finally {
         setLoading(false);
       }

@@ -1,13 +1,6 @@
-/**
- * tmdbBackend.ts
- *
- * Fetches TMDB movie data via the Motoko backend actor (HTTP outcalls).
- * The browser NEVER calls TMDB directly — all requests go through the canister.
- * This bypasses Indian ISP blocks and CORS restrictions.
- */
-
+// src/services/tmdbBackend.ts
 import type { backendInterface } from "../backend";
-import type { TMDBMovie, TMDBTrendingResponse } from "../types/tmdb";
+import type { TMDBMovie, TMDBMovieDetail } from "../types/tmdb";
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -16,6 +9,7 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
+// ── Cache helpers ─────────────────────────────
 function readCache<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(`tmdb_backend_cache:${key}`);
@@ -23,218 +17,163 @@ function readCache<T>(key: string): T | null {
       const entry: CacheEntry<T> = JSON.parse(raw);
       if (Date.now() - entry.timestamp < CACHE_TTL_MS) return entry.data;
     }
-  } catch {
-    /* ignore */
-  }
+  } catch {}
   return null;
 }
 
-function readStaleCache<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(`tmdb_backend_cache:${key}`);
-    if (raw) return (JSON.parse(raw) as CacheEntry<T>).data;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function writeCache<T>(key: string, data: T): void {
+function writeCache<T>(key: string, data: T) {
   try {
     localStorage.setItem(
       `tmdb_backend_cache:${key}`,
       JSON.stringify({ data, timestamp: Date.now() }),
     );
-  } catch {
-    /* quota exceeded */
-  }
+  } catch {}
 }
 
-/**
- * Safely parses a backend response that may be a JSON string or already an object.
- */
-function safeParseResponse(raw: unknown): Partial<TMDBTrendingResponse> {
-  try {
-    if (typeof raw === "string") {
-      return JSON.parse(raw || "{}") as TMDBTrendingResponse;
-    }
-    if (raw && typeof raw === "object") {
-      return raw as TMDBTrendingResponse;
-    }
-    return {};
-  } catch {
-    return {};
-  }
+// ── Actor cast helper (TMDB methods may not be in generated types yet) ──
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function tmdb(actor: backendInterface): any {
+  return actor as any;
 }
 
-function safeParseAny(raw: unknown): Record<string, unknown> {
-  try {
-    if (typeof raw === "string") {
-      return JSON.parse(raw || "{}") as Record<string, unknown>;
-    }
-    if (raw && typeof raw === "object") {
-      return raw as Record<string, unknown>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
-}
-
-// ── List endpoints ────────────────────────────────────────────────────────────
-
-type ListMethod =
-  | "getTrending"
-  | "getPopular"
-  | "getTopRated"
-  | "getNowPlaying"
-  | "getUpcoming";
-
-async function backendFetchList(
-  actor: backendInterface,
-  method: ListMethod,
-  cacheKey: string,
-): Promise<TMDBMovie[]> {
-  const cached = readCache<TMDBMovie[]>(cacheKey);
-  if (cached) return cached;
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = await (actor as any)[method]();
-    const data = safeParseResponse(raw);
-    const results: TMDBMovie[] = Array.isArray(data.results)
-      ? data.results
+// ── Response parser ───────────────────────────
+function parseMovieList(raw: string): TMDBMovie[] {
+  const parsed = JSON.parse(raw || "{}");
+  return Array.isArray(parsed.results)
+    ? parsed.results
+    : Array.isArray(parsed)
+      ? parsed
       : [];
-    if (results.length > 0) {
-      writeCache(cacheKey, results);
-    }
-    return results;
-  } catch (err) {
-    const stale = readStaleCache<TMDBMovie[]>(cacheKey);
-    if (stale) return stale;
-    throw err;
-  }
 }
 
+// ── Fetch functions ───────────────────────────
+
+// Trending Movies
 export async function fetchTrendingViaBackend(
   actor: backendInterface,
 ): Promise<TMDBMovie[]> {
-  return backendFetchList(actor, "getTrending", "trending");
+  const key = "trending";
+  const cached = readCache<TMDBMovie[]>(key);
+  if (cached) return cached;
+
+  const raw = await tmdb(actor).getTrending(); // backend returns Text
+  const data = parseMovieList(raw);
+  writeCache(key, data);
+  return data;
 }
 
-export async function fetchPopularViaBackend(
-  actor: backendInterface,
-): Promise<TMDBMovie[]> {
-  return backendFetchList(actor, "getPopular", "popular");
-}
-
+// Top Rated Movies
 export async function fetchTopRatedViaBackend(
   actor: backendInterface,
 ): Promise<TMDBMovie[]> {
-  return backendFetchList(actor, "getTopRated", "top_rated");
+  const key = "top_rated";
+  const cached = readCache<TMDBMovie[]>(key);
+  if (cached) return cached;
+
+  const raw = await tmdb(actor).getTopRated(); // backend returns Text
+  const data = parseMovieList(raw);
+  writeCache(key, data);
+  return data;
 }
 
-export async function fetchNowPlayingViaBackend(
-  actor: backendInterface,
-): Promise<TMDBMovie[]> {
-  return backendFetchList(actor, "getNowPlaying", "now_playing");
-}
-
+// Upcoming Movies
 export async function fetchUpcomingViaBackend(
   actor: backendInterface,
 ): Promise<TMDBMovie[]> {
-  // Falls back to getNowPlaying if getUpcoming isn't available on this backend build
-  try {
-    return await backendFetchList(actor, "getUpcoming", "upcoming");
-  } catch {
-    return backendFetchList(actor, "getNowPlaying", "upcoming_fallback");
-  }
+  const key = "upcoming";
+  const cached = readCache<TMDBMovie[]>(key);
+  if (cached) return cached;
+
+  const a = tmdb(actor);
+  // Fall back to getNowPlaying if getUpcoming isn't deployed yet
+  const raw = await (a.getUpcoming ? a.getUpcoming() : a.getNowPlaying()); // backend returns Text
+  const data = parseMovieList(raw);
+  writeCache(key, data);
+  return data;
 }
 
-// ── Genre discovery endpoint ──────────────────────────────────────────────────
+// Popular Movies
+export async function fetchPopularViaBackend(
+  actor: backendInterface,
+): Promise<TMDBMovie[]> {
+  const key = "popular";
+  const cached = readCache<TMDBMovie[]>(key);
+  if (cached) return cached;
 
+  const raw = await tmdb(actor).getPopular(); // backend returns Text
+  const data = parseMovieList(raw);
+  writeCache(key, data);
+  return data;
+}
+
+// Now Playing Movies
+export async function fetchNowPlayingViaBackend(
+  actor: backendInterface,
+): Promise<TMDBMovie[]> {
+  const key = "now_playing";
+  const cached = readCache<TMDBMovie[]>(key);
+  if (cached) return cached;
+
+  const raw = await tmdb(actor).getNowPlaying(); // backend returns Text
+  const data = parseMovieList(raw);
+  writeCache(key, data);
+  return data;
+}
+
+// Movies By Genre
 export async function fetchMoviesByGenreViaBackend(
   actor: backendInterface,
   genreId: number,
 ): Promise<TMDBMovie[]> {
-  const cacheKey = `genre_${genreId}`;
-  const cached = readCache<TMDBMovie[]>(cacheKey);
+  const key = `genre_${genreId}`;
+  const cached = readCache<TMDBMovie[]>(key);
   if (cached) return cached;
 
-  try {
-    const raw = await (actor as any).getMoviesByGenre(BigInt(genreId));
-    const data = safeParseResponse(raw);
-    const results: TMDBMovie[] = Array.isArray(data.results)
-      ? data.results
-      : [];
-    if (results.length > 0) {
-      writeCache(cacheKey, results);
-    }
-    return results;
-  } catch {
-    const stale = readStaleCache<TMDBMovie[]>(cacheKey);
-    if (stale) return stale;
-    return [];
-  }
+  const raw = await tmdb(actor).getMoviesByGenre(BigInt(genreId)); // backend returns Text
+  const data = parseMovieList(raw);
+  writeCache(key, data);
+  return data;
 }
 
-// ── Per-movie endpoints ───────────────────────────────────────────────────────
-
-async function backendFetchMovie<T>(
+// Movie Details
+export async function fetchMovieDetailViaBackend(
   actor: backendInterface,
-  method: "getMovieDetails" | "getMovieVideos" | "getSimilarMovies",
   id: number,
-  cacheKey: string,
-): Promise<T> {
-  const cached = readCache<T>(cacheKey);
+): Promise<TMDBMovieDetail | null> {
+  const key = `movie_${id}`;
+  const cached = readCache<TMDBMovieDetail>(key);
   if (cached) return cached;
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = await (actor as any)[method](BigInt(id));
-    const parsed = safeParseAny(raw) as T;
-    writeCache(cacheKey, parsed);
-    return parsed;
-  } catch (err) {
-    const stale = readStaleCache<T>(cacheKey);
-    if (stale) return stale;
-    throw err;
-  }
+  const a = tmdb(actor);
+  if (!a.getMovieDetails) return null;
+  const raw = await a.getMovieDetails(id); // backend returns Text
+  if (!raw) return null;
+  const data: TMDBMovieDetail = JSON.parse(raw || "{}");
+  if (!data || !data.id) return null;
+  writeCache(key, data);
+  return data;
 }
 
-export async function fetchMovieDetailsViaBackend(
-  actor: backendInterface,
-  id: number,
-): Promise<Record<string, unknown>> {
-  return backendFetchMovie<Record<string, unknown>>(
-    actor,
-    "getMovieDetails",
-    id,
-    `movie_details_${id}`,
-  );
-}
+// Alias for useTMDB.ts compatibility
+export const fetchMovieDetailsViaBackend = fetchMovieDetailViaBackend;
 
-export async function fetchMovieVideosViaBackend(
-  actor: backendInterface,
-  id: number,
-): Promise<Record<string, unknown>> {
-  return backendFetchMovie<Record<string, unknown>>(
-    actor,
-    "getMovieVideos",
-    id,
-    `movie_videos_${id}`,
-  );
-}
-
-export async function fetchSimilarMoviesViaBackend(
+// Similar Movies
+export async function fetchSimilarViaBackend(
   actor: backendInterface,
   id: number,
 ): Promise<TMDBMovie[]> {
-  const result = await backendFetchMovie<TMDBTrendingResponse>(
-    actor,
-    "getSimilarMovies",
-    id,
-    `movie_similar_${id}`,
-  );
-  return Array.isArray(result.results) ? result.results : [];
+  const key = `similar_${id}`;
+  const cached = readCache<TMDBMovie[]>(key);
+  if (cached) return cached;
+
+  const a = tmdb(actor);
+  if (!a.getSimilarMovies) return [];
+  const raw = await a.getSimilarMovies(id); // backend returns Text
+  if (!raw) return [];
+  const data = parseMovieList(raw);
+  writeCache(key, data);
+  return data;
 }
+
+// Alias for useTMDB.ts compatibility
+export const fetchSimilarMoviesViaBackend = fetchSimilarViaBackend;

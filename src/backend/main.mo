@@ -885,4 +885,13 @@ actor {
     result;
   };
 
+  public func getUpcoming() : async Text {
+    await tmdbFetch("/movie/upcoming");
+  };
+
+  public func searchMovies(searchQuery : Text) : async Text {
+    await tmdbFetch("/search/movie?query=" # searchQuery);
+  };
+
+
 };
